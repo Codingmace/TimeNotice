@@ -4,8 +4,10 @@ Update this file every session. One row per test run.
 
 ## Current
 - Phase: 5 — satisfied on existing evidence 2026-11-01 (behavior matrix below; No Overlay dropped as unobservable, no new code needed)
-- Next action: Phase 6 hardening — or pause here
-- Open: CountWhenRunning self-test (user: check box, alt-tab to desktop 2 min, reminders continue)
+- Next action: Phase 6 hardening (fresh chat)
+- Open (deferred to post-Phase 6): CountWhenRunning ON-path self-test (tick box, alt-tab 2 min); Game-tab crowding polish; repo public release
+- Repo: private for now, will go public later
+- Config: reset to fresh-install defaults 2026-11-01 at user request
 
 ## How to sync Mac <-> Windows
 ```bash
@@ -21,7 +23,7 @@ dotnet run --project src/TimeNotice/TimeNotice.csproj
 - [x] P1 Overlay: appears bottom-right, fades ~5s, no focus steal (type in Notepad while it shows), works over borderless window — passed 2026-11-01 per user manual test
 - [x] P1 Quiet gate: add `notepad.exe` to QuietModeExes in `%AppData%/TimeNotice/settings.json`, focus Notepad → Test reminder shows nothing — passed 2026-11-01 (Notepad suppress=True, Desktop showed; debug.log confirms)
 - [x] P2 Scheduler: recurring reminders + pause persists after restart — passed 2026-11-01 per user (pause/unpause confirmed; 1-min recurrence + settings persistence in debug.log across restarts)
-- [ ] P3 Detection: known exe starts/stops session, ignored app not mistaken
+- [x] P3 Detection: known exe starts/stops session, ignored app not mistaken — passed 2026-11-01 per user explicit close-out
 - [x] P4 Heuristics: unknown sustained session found (AppControl via GPU, live 2026-11-01), suspect grace on focus loss logged, no flap
 - [x] P5 Safety: matrix-verified 2026-11-01 — every cell already implemented (P1 Quiet test + P3 ignore-wins test); No Overlay dropped, no new code
 - [ ] P6 Hardening: clean install, Defender scan, no invasive deps
