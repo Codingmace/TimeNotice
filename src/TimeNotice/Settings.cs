@@ -35,6 +35,8 @@ public sealed class Settings
     public string GameDetectSubTemplate { get; set; } = "Monitoring every {interval} min"; // blank = no sub line
     public bool PauseAll { get; set; } = false;
     public List<string> QuietModeExes { get; set; } = new() { "example-game.exe" };
+    public List<string> IgnoreExes { get; set; } = new();
+    // ponytail: pre-rename key — Load merges it into IgnoreExes once, then drops it; delete this property next cleanup
     public List<string> LauncherExes { get; set; } = new();
     public bool HeuristicEnabled { get; set; } = true;
     public int HeuristicStartSeconds { get; set; } = 60; // sustained active before a session is found
@@ -78,11 +80,15 @@ public sealed class Settings
         if (string.IsNullOrWhiteSpace(s.CustomBackground)) s.CustomBackground = "#CC1E1E1E";
         if (string.IsNullOrWhiteSpace(s.CustomText)) s.CustomText = "#FFFFFFFF";
         if (string.IsNullOrWhiteSpace(s.CustomSubText)) s.CustomSubText = "#FFBBBBBB";
-        if (s.LauncherExes is null || s.LauncherExes.Count == 0)
-            s.LauncherExes = GameCatalog.DefaultLaunchers(); // seed Phase 3 launcher-ignore on old configs
-        s.LauncherExes = s.LauncherExes
+        if (s.IgnoreExes is null) s.IgnoreExes = new();
+        if (s.IgnoreExes.Count == 0 && s.LauncherExes is not null && s.LauncherExes.Count > 0)
+            s.IgnoreExes = s.LauncherExes; // one-version migration from the LauncherExes key
+        s.LauncherExes = new(); // stop writing the old key
+        s.IgnoreExes = s.IgnoreExes
             .Select(x => (x ?? "").Trim()).Where(x => x.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (s.IgnoreExes.Count == 0)
+            s.IgnoreExes = GameCatalog.DefaultIgnored(); // seed the ignore list on old configs
         if (s.HeuristicStartSeconds < 10 || s.HeuristicStartSeconds > 600) s.HeuristicStartSeconds = 60;
         if (s.HeuristicSuspectSeconds < 5 || s.HeuristicSuspectSeconds > 300) s.HeuristicSuspectSeconds = 30;
         if (s.HeuristicInactiveMinutes < 1 || s.HeuristicInactiveMinutes > 60) s.HeuristicInactiveMinutes = 5;

@@ -115,9 +115,9 @@ public sealed class ConfirmPrompt : IDisposable
             }
             else if (choice.StartsWith("reject", StringComparison.OrdinalIgnoreCase))
             {
-                if (!_settings.LauncherExes.Any(l => string.Equals(GameExeOf(l), _exe, StringComparison.OrdinalIgnoreCase)))
+                if (!_settings.IgnoreExes.Any(l => string.Equals(GameExeOf(l), _exe, StringComparison.OrdinalIgnoreCase)))
                 {
-                    _settings.LauncherExes.Add(_exe);
+                    _settings.IgnoreExes.Add(_exe);
                     _settings.Save();
                 }
             }

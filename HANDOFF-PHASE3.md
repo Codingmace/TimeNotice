@@ -5,7 +5,7 @@ Date: 2026-11-01. Previous session did P1–P2 plus approved extras. App is live
 ## Status
 
 - PASS: P1 overlay + no-focus-steal, P1 Quiet gate, P2 scheduler (recurring + pause persist, user-confirmed).
-- NEXT: P3 Detection per `SCOPE.md` §4–§5 + §10: foreground + catalog. Gate: known games start/stop, launcher not mistaken.
+- NEXT: P3 Detection per `SCOPE.md` §4–§5 + §10: foreground + catalog. Gate: known games start/stop, ignored app not mistaken.
 - HEAD: `387f4ae` + this handoff commit. Remote: `https://github.com/Skeeee343/TimeNotice` (`main`, tracking set, pushed OK).
 
 ## What's already built (don't rebuild)
@@ -23,7 +23,7 @@ Date: 2026-11-01. Previous session did P1–P2 plus approved extras. App is live
 
 ## P3 remaining (from SCOPE, in suggested order)
 
-1. Launcher-ignore list: `steam.exe` etc. must never count as gameplay (currently any listed exe counts; unlisted exes are invisible).
+1. Ignore list: `steam.exe` etc. must never count as gameplay (currently any listed exe counts; unlisted exes are invisible).
 2. Small verified game catalog (12 max): `{exe, display, policy}` + multi-exe titles listed explicitly.
 3. Unknown-exe handling: silent `debug.log` + tray hint, never an in-game popup.
 4. Later phases (do NOT start unasked): P4 heuristics (GPU PDH + idle + fullscreen state machine), P5 per-game policy, P6 hardening/Defender.

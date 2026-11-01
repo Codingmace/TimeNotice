@@ -35,7 +35,7 @@ public partial class App : System.Windows.Application
         _tray.ContextMenuStrip.Items.Add("Test confirm (Z/X)", null, (_, _) => TestConfirm());
         _tray.ContextMenuStrip.Items.Add("Add focused app to Games", null, (_, _) => ClassifyFocused("games"));
         _tray.ContextMenuStrip.Items.Add("Add focused app to Quiet", null, (_, _) => ClassifyFocused("quiet"));
-        _tray.ContextMenuStrip.Items.Add("Add focused app to Launchers", null, (_, _) => ClassifyFocused("launchers"));
+        _tray.ContextMenuStrip.Items.Add("Add focused app to Ignored", null, (_, _) => ClassifyFocused("ignored"));
         var pauseItem = new WinForms.ToolStripMenuItem("Pause") { Checked = _settings.PauseAll, CheckOnClick = true };
         pauseItem.CheckedChanged += (_, _) =>
         {
@@ -94,19 +94,19 @@ public partial class App : System.Windows.Application
     private Heuristics.GpuSampler? _gpu;
     private bool _heurInitLogged;
 
-    // Phase 3: self + launcher-ignore never count as gameplay. Launcher wins
+    // Phase 3: self + ignore list never count as gameplay. Ignore wins
     // over a Games entry for the same exe (SCOPE §5: launchers = Ignore).
     private bool IsIgnored(string? exe)
     {
         if (string.IsNullOrWhiteSpace(exe)) return false;
         if (exe.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase)) return true; // never score self
-        foreach (var line in _settings.LauncherExes)
+        foreach (var line in _settings.IgnoreExes)
             if (string.Equals(ParseGameEntry(line).Exe, exe, StringComparison.OrdinalIgnoreCase)) return true;
         return GameCatalog.IsIgnore(exe);
     }
 
     // Effective game list: user mapping first, then catalog Normal entries not
-    // overridden into Launchers. Unknown exes are NOT added — silent log only.
+    // overridden into Ignored. Unknown exes are NOT added — silent log only.
     private List<(string Exe, string? Name)> EffectiveGames()
     {
         var list = _settings.GameExes
@@ -157,8 +157,8 @@ public partial class App : System.Windows.Application
         }
         else
         {
-            if (!_settings.LauncherExes.Any(l => string.Equals(ParseGameEntry(l).Exe, fg, StringComparison.OrdinalIgnoreCase)))
-                _settings.LauncherExes.Add(fg);
+            if (!_settings.IgnoreExes.Any(l => string.Equals(ParseGameEntry(l).Exe, fg, StringComparison.OrdinalIgnoreCase)))
+                _settings.IgnoreExes.Add(fg);
         }
         _settings.Save();
         try { System.IO.File.AppendAllText(System.IO.Path.Combine(Settings.Dir, "debug.log"), $"{DateTime.Now:HH:mm:ss} src=classify fg={fg} target={target}{System.Environment.NewLine}"); } catch { }
@@ -172,9 +172,9 @@ public partial class App : System.Windows.Application
         if (_settings.PauseAll) return;
         if (NotificationPolicy.ShouldSuppress(fg, _settings)) return; // Quiet wins over both modes, retry next tick
         NoteUnknown(fg); // Phase 3: silent log + tray hint, never a popup
-        if (IsIgnored(fg)) fg = null; // launchers + self never hold focus for sessions
+        if (IsIgnored(fg)) fg = null; // ignored + self never hold focus for sessions
         var games = EffectiveGames();
-        games.RemoveAll(g => IsIgnored(g.Exe)); // launcher-ignore wins over a Games entry for the same exe
+        games.RemoveAll(g => IsIgnored(g.Exe)); // ignore wins over a Games entry for the same exe
         // detection: any listed game process running (focused or not)
         if (_settings.GameEnabled && games.Count > 0)
         {
@@ -295,7 +295,7 @@ public partial class App : System.Windows.Application
                             var tip = $"TimeNotice - session: {GameDisplayName(fg!)}";
                             _tray.Text = tip.Length <= 63 ? tip : tip[..63];
                         }
-                        MaybeAutoConfirm(fg); // new heuristic session: ask once, Z=Games X=Launchers C=skip
+                        MaybeAutoConfirm(fg); // new heuristic session: ask once, Z=Games X=Ignored C=skip
                     }
                 }
                 else if (signal)
@@ -493,7 +493,7 @@ public partial class App : System.Windows.Application
     }
 
     // Auto confirm: first tick of a new heuristic session asks once.
-    // Z writes Games, X writes Launchers, timeout (15s) accepts like Z.
+    // Z writes Games, X writes Ignored, timeout (15s) accepts like Z.
     // Generic hosts (javaw.exe) are named from the window title when known.
     private static readonly HashSet<string> GenericHostExes = new(StringComparer.OrdinalIgnoreCase) { "javaw.exe" };
 
@@ -524,7 +524,7 @@ public partial class App : System.Windows.Application
         if (IsKnownGame(exe)) return;
         if (_settings.QuietModeExes.Any(q => string.Equals(q, exe, StringComparison.OrdinalIgnoreCase))) return;
         if (GameCatalog.Find(exe) is not null) return;
-        foreach (var line in _settings.LauncherExes)
+        foreach (var line in _settings.IgnoreExes)
             if (string.Equals(ParseGameEntry(line).Exe, exe, StringComparison.OrdinalIgnoreCase)) return;
         _confirm = new ConfirmPrompt(_overlay, _settings, exe, AutoDisplayName(exe), OnConfirmDone, timeoutDefaultAccept: true);
         _confirm.Start();
