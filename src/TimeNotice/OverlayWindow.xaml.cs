@@ -21,6 +21,7 @@ public partial class OverlayWindow : Window
     public OverlayWindow(Settings settings)
     {
         InitializeComponent();
+        Icon = AppIcon.CreateWindowIcon();
         _settings = settings;
         ShowActivated = false;
         _hideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(settings.DisplaySeconds) };
@@ -47,6 +48,37 @@ public partial class OverlayWindow : Window
         _hideTimer.Interval = TimeSpan.FromSeconds(Math.Max(1, _settings.DisplaySeconds));
         _hideTimer.Stop();
         _hideTimer.Start();
+    }
+
+    // Sticky confirm (test): shows without auto-hide so a 15s poll can own
+    // the countdown. Still NOACTIVATE + TRANSPARENT: no focus steal, click-through.
+    public void ShowSticky(string main, string? sub)
+    {
+        BeginAnimation(OpacityProperty, null);
+        TimeText.Text = main;
+        SubText.Text = sub ?? "";
+        ApplyTheme();
+        if (Visibility != Visibility.Visible) Show();
+        UpdateLayout();
+        Position();
+        _hideTimer.Stop();
+    }
+
+    public void UpdateSticky(string main, string? sub)
+    {
+        if (Visibility != Visibility.Visible) return;
+        TimeText.Text = main;
+        SubText.Text = sub ?? "";
+        UpdateLayout();
+        Position();
+    }
+
+    public void HideNow()
+    {
+        _hideTimer.Stop();
+        BeginAnimation(OpacityProperty, null);
+        Hide();
+        try { Hidden?.Invoke(); } catch { }
     }
 
     private void ApplyTheme()

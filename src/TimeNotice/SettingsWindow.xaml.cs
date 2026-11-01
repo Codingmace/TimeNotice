@@ -11,6 +11,7 @@ public partial class SettingsWindow : Window
     public SettingsWindow(Settings settings, Action onSaved)
     {
         InitializeComponent();
+        Icon = AppIcon.CreateWindowIcon();
         _settings = settings;
         _onSaved = onSaved;
         GeneralEnabledBox.IsChecked = _settings.GeneralEnabled;

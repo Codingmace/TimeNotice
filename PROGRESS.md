@@ -54,6 +54,12 @@ dotnet run --project src/TimeNotice/TimeNotice.csproj
 | 2026-11-01 | Windows | P4 heuristics: state machine (Idle/Active/Suspect/Inactive) + idle/fullscreen/GPU signals, 5 settings, tray+Settings UI, sleep closes sessions | Built 0 warn; live: heur-init gpuAvail=True, known-game path intact |
 | 2026-11-01 | Windows | P4 gate PASS: user held AppControl maximized 30s → heur-cand (gpu=51% idle=0s) → active → auto-game reminder naming AppControl; focus return → suspect grace (no flap, no close). Restored HeuristicStartSeconds 60, rebuilt 0 warn, relaunched, committed | App stable (PID 21728), pushed |
 | 2026-11-01 | Windows | Running-counts toggle: CountWhenRunning (default off, Game tab checkbox) — session follows earliest-running listed game without focus; focused still wins; wording names the session game; heuristic still focus-only | Built 0 warn; default-off regression live (detect+game normal); ON-path left to user self-test |
+| 2026-11-01 | Windows | Confirm prompt (Z/X/C poll test): ConfirmPrompt via GetAsyncKeyState, sticky overlay, 15s default-accept; tray Test confirm | Built 0 warn, relaunched |
+| 2026-11-01 | Windows | Confirm combos + auto path: Ctrl+Alt+Z/X(/C), MaybeAutoConfirm on heur Idle→Active (Z/X only, timeout writes nothing), timeout-dismiss bug fixed | Built 0 warn; live: javaw accept → Games → auto-detect fired |
+| 2026-11-01 | Windows | GPU default 5→10, wiped javaw for retest, HeuristicStart 30s this run; live: cand 54% → active in 30s → auto Ctrl+Alt+Z/X prompt → timeout-dismiss, Games still empty | Loop verified, next session re-prompts |
+| 2026-11-01 | Windows | Auto-naming: ForegroundWindowText + GenericHostExes (javaw) + title-has-minecraft → prompt shows Minecraft, Accept stores "javaw.exe = Minecraft" | Built 0 warn, relaunched; pending live game session |
+| 2026-11-01 | Windows | Confirm fixes: auto timeout now accepts (was dismiss — footer promised Accept), footer dropped "type freely" line | Built 0 warn, relaunched; Games still empty, next session re-prompts |
+| 2026-11-01 | Windows | Confirm cleanup: stacked Accept/Reject lines, removed Dismiss keybind entirely (tray test now Z/X) | Built 0 warn, relaunched |
 
 ## Ponytail debt (audit 2026-10-21, biggest first)
 - [ ] `Settings.cs`: delete `ReminderMinutes + Position` until a Phase 2 reader exists

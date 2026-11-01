@@ -10,6 +10,22 @@ public static class NotificationPolicy
     private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int count);
+
+    // Window title of the foreground window, for naming generic hosts
+    // (javaw.exe serves any Java app — the title tells us which one).
+    public static string? ForegroundWindowText()
+    {
+        try
+        {
+            var hwnd = GetForegroundWindow();
+            if (hwnd == IntPtr.Zero) return null;
+            var sb = new System.Text.StringBuilder(512);
+            return GetWindowText(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : null;
+        }
+        catch { return null; }
+    }
 
     public static string? ForegroundExe()
     {

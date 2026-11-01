@@ -7,10 +7,12 @@ namespace TimeNotice;
 public partial class App : System.Windows.Application
 {
     private WinForms.NotifyIcon? _tray;
+    private System.Drawing.Icon? _trayIcon;
     private OverlayWindow? _overlay;
     private Settings _settings = new();
     private DispatcherTimer? _scheduler;
     private SettingsWindow? _settingsWindow;
+    private ConfirmPrompt? _confirm;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -19,16 +21,18 @@ public partial class App : System.Windows.Application
         _overlay = new OverlayWindow(_settings);
         _overlay.Hidden += OnOverlayHidden;
 
-        // ponytail: SystemIcons placeholder, custom .ico when branding matters
+        // ponytail: shared AppIcon helper; a .ico file replaces this if the Explorer exe icon needs branding too
+        _trayIcon = AppIcon.CreateTrayIcon();
         _tray = new WinForms.NotifyIcon
         {
-            Icon = System.Drawing.SystemIcons.Information,
+            Icon = _trayIcon,
             Visible = true,
             Text = "TimeNotice"
         };
         _tray.ContextMenuStrip = new WinForms.ContextMenuStrip();
         _tray.ContextMenuStrip.Items.Add("Test general reminder", null, (_, _) => ShowTest("manual-general", "general"));
         _tray.ContextMenuStrip.Items.Add("Test game reminder", null, (_, _) => ShowTest("manual-game", "game"));
+        _tray.ContextMenuStrip.Items.Add("Test confirm (Z/X)", null, (_, _) => TestConfirm());
         _tray.ContextMenuStrip.Items.Add("Add focused app to Games", null, (_, _) => ClassifyFocused("games"));
         _tray.ContextMenuStrip.Items.Add("Add focused app to Quiet", null, (_, _) => ClassifyFocused("quiet"));
         _tray.ContextMenuStrip.Items.Add("Add focused app to Launchers", null, (_, _) => ClassifyFocused("launchers"));
@@ -291,6 +295,7 @@ public partial class App : System.Windows.Application
                             var tip = $"TimeNotice - session: {GameDisplayName(fg!)}";
                             _tray.Text = tip.Length <= 63 ? tip : tip[..63];
                         }
+                        MaybeAutoConfirm(fg); // new heuristic session: ask once, Z=Games X=Launchers C=skip
                     }
                 }
                 else if (signal)
@@ -487,6 +492,63 @@ public partial class App : System.Windows.Application
         return t >= start || t < end; // overnight, e.g. 22:00-07:00
     }
 
+    // Auto confirm: first tick of a new heuristic session asks once.
+    // Z writes Games, X writes Launchers, timeout (15s) accepts like Z.
+    // Generic hosts (javaw.exe) are named from the window title when known.
+    private static readonly HashSet<string> GenericHostExes = new(StringComparer.OrdinalIgnoreCase) { "javaw.exe" };
+
+    private string AutoDisplayName(string? exe)
+    {
+        if (string.IsNullOrWhiteSpace(exe)) return "";
+        foreach (var line in _settings.GameExes)
+        {
+            var (e, name) = ParseGameEntry(line);
+            if (string.Equals(e, exe, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(name))
+                return GameDisplayName(exe); // user mapping wins, never overridden
+        }
+        if (GameCatalog.Find(exe) is not null) return GameDisplayName(exe);
+        if (GenericHostExes.Contains(exe))
+        {
+            var title = NotificationPolicy.ForegroundWindowText();
+            if (title is not null && title.Contains("minecraft", StringComparison.OrdinalIgnoreCase))
+                return "Minecraft";
+        }
+        return GameDisplayName(exe);
+    }
+    private void MaybeAutoConfirm(string? exe)
+    {
+        if (_overlay is null) return;
+        if (_confirm is { Active: true }) return; // one prompt at a time
+        if (string.IsNullOrWhiteSpace(exe)) return;
+        if (IsIgnored(exe)) return;
+        if (IsKnownGame(exe)) return;
+        if (_settings.QuietModeExes.Any(q => string.Equals(q, exe, StringComparison.OrdinalIgnoreCase))) return;
+        if (GameCatalog.Find(exe) is not null) return;
+        foreach (var line in _settings.LauncherExes)
+            if (string.Equals(ParseGameEntry(line).Exe, exe, StringComparison.OrdinalIgnoreCase)) return;
+        _confirm = new ConfirmPrompt(_overlay, _settings, exe, AutoDisplayName(exe), OnConfirmDone, timeoutDefaultAccept: true);
+        _confirm.Start();
+    }
+
+    private void TestConfirm()
+    {
+        if (_overlay is null) return;
+        if (_confirm is { Active: true }) return; // one prompt at a time
+        var fg = NotificationPolicy.ForegroundExe();
+        if (string.IsNullOrWhiteSpace(fg) || fg.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase))
+            fg = "minecraft.exe"; // demo name when invoked from tray/desktop
+        var display = AutoDisplayName(fg);
+        _confirm = new ConfirmPrompt(_overlay, _settings, fg, display, OnConfirmDone);
+        _confirm.Start();
+    }
+
+    private void OnConfirmDone(string choice, string exe)
+    {
+        try { _confirm?.Dispose(); } catch { }
+        _confirm = null;
+        ShowOrQueue($"confirm: {choice} ({exe})", "choice saved — see debug.log", "confirm-done");
+    }
+
     private void ShowTest(string source = "manual", string? modeOverride = null)
     {
         if (_overlay is null) return;
@@ -556,6 +618,7 @@ public partial class App : System.Windows.Application
         try { Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerMode; } catch { }
         try { _gpu?.Dispose(); } catch { }
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); }
+        try { _trayIcon?.Dispose(); } catch { }
         base.OnExit(e);
     }
 
