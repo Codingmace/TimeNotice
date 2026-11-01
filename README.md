@@ -22,6 +22,19 @@ V1 feature-complete. All 6 phases passed on Windows 2026-11-01 (overlay, schedul
 5. Run: `dotnet run --project src/TimeNotice/TimeNotice.csproj`
 6. Tray icon → Test general / Test game. Left-click tray opens Settings. Logs at `%AppData%/TimeNotice/debug.log`.
 
+## Beta debugging (send this, nothing else needed)
+
+Files live at `%AppData%\TimeNotice\` (`Win+R` → paste `%AppData%\TimeNotice` → Enter):
+- `settings.json` — your config
+- `debug.log` — what happened (plus `debug.log.old` if it exists — log rotates at ~512KB)
+
+Each report needs these 3 things:
+1. What you were doing (game/app name, fullscreen or borderless, paused or not).
+2. What you expected vs what you saw.
+3. Both attached files (`settings.json` + `debug.log`).
+
+Common first checks before reporting: Pause unchecked? Focused app not in Quiet list? Game exe listed under Settings → Game? General reminders fire on a schedule even with no game focused; game reminders need the game focused (unless CountWhenRunning is on).
+
 Release binary: `dotnet publish src/TimeNotice/TimeNotice.csproj -c Release` (output to `publish/`). SmartScreen warning is expected until signing/reputation — see `SCOPE.md` §2.
 
 ## Docs
