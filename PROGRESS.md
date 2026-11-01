@@ -3,8 +3,8 @@
 Update this file every session. One row per test run.
 
 ## Current
-- Phase: 4 — DONE, gate passed live 2026-11-01 (AppControl heuristic session + suspect grace, no flap)
-- Next action: Phase 5 safety gate (per-game policy + Quiet Mode) — or pause here
+- Phase: 5 — satisfied on existing evidence 2026-11-01 (behavior matrix below; No Overlay dropped as unobservable, no new code needed)
+- Next action: Phase 6 hardening — or pause here
 - Open: CountWhenRunning self-test (user: check box, alt-tab to desktop 2 min, reminders continue)
 
 ## How to sync Mac <-> Windows
@@ -23,8 +23,28 @@ dotnet run --project src/TimeNotice/TimeNotice.csproj
 - [x] P2 Scheduler: recurring reminders + pause persists after restart — passed 2026-11-01 per user (pause/unpause confirmed; 1-min recurrence + settings persistence in debug.log across restarts)
 - [ ] P3 Detection: known exe starts/stops session, ignored app not mistaken
 - [x] P4 Heuristics: unknown sustained session found (AppControl via GPU, live 2026-11-01), suspect grace on focus loss logged, no flap
-- [ ] P5 Safety: flagged exe suppresses all popups, resumes after exit
+- [x] P5 Safety: matrix-verified 2026-11-01 — every cell already implemented (P1 Quiet test + P3 ignore-wins test); No Overlay dropped, no new code
 - [ ] P6 Hardening: clean install, Defender scan, no invasive deps
+
+## Behavior matrix (agreed 2026-11-01 — the whole notification model)
+
+Terms: **tracked** = listed game focused (or heuristic session, or running with CountWhenRunning on).
+**ignored** = IgnoreExes + self. Time reminders are unconditional; only Quiet/Pause silence them.
+
+| Game mode | Time mode | Focused app | Result |
+|---|---|---|---|
+| off | off | anything | nothing |
+| off | on | anything (not Quiet) | time only |
+| off | on | Quiet / paused | nothing |
+| on | off | tracked game | game only |
+| on | off | ignored / Quiet | nothing |
+| on | on | tracked game | both |
+| on | on | ignored | time only |
+| on | on | Quiet | nothing |
+
+Notes: unknown app never blocks time reminders and never starts a game session by itself
+(heuristic promotion is the only path, and it logs + asks). No Overlay mode dropped:
+with no database, an invisible untracked clock is unobservable, so it added nothing.
 
 ## Session log
 | Date (UTC) | Machine | Did | Result |
