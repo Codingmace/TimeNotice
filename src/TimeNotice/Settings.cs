@@ -53,10 +53,14 @@ public sealed class Settings
     public static Settings Load()
     {
         Settings s;
+        string raw = "";
         try
         {
             if (File.Exists(Path))
-                s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(Path)) ?? new Settings();
+            {
+                raw = File.ReadAllText(Path);
+                s = JsonSerializer.Deserialize<Settings>(raw) ?? new Settings();
+            }
             else
                 return new Settings();
         }
@@ -99,7 +103,9 @@ public sealed class Settings
         s.IgnoreExes = s.IgnoreExes
             .Select(x => (x ?? "").Trim()).Where(x => x.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        if (s.IgnoreExes.Count == 0)
+        // Seed defaults only when the file never had the key (old config).
+        // A present-but-empty list means the user cleared it on purpose.
+        if (s.IgnoreExes.Count == 0 && !raw.Contains("\"IgnoreExes\""))
             s.IgnoreExes = GameCatalog.DefaultIgnored(); // seed the ignore list on old configs
         if (s.HeuristicStartSeconds < 10 || s.HeuristicStartSeconds > 600) s.HeuristicStartSeconds = 60;
         if (s.HeuristicSuspectSeconds < 5 || s.HeuristicSuspectSeconds > 300) s.HeuristicSuspectSeconds = 30;

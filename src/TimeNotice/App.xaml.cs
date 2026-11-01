@@ -19,12 +19,8 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
         // Single instance: second launch exits silently (tray already running).
-        _singleInstance = new Mutex(true, @"Global\TimeNotice-single", out var owned);
-        if (!owned)
-        {
-            Shutdown();
-            return;
-        }
+        try { _singleInstance = new Mutex(true, @"Local\TimeNotice-single", out var owned); if (!owned) { Shutdown(); return; } }
+        catch { /* fail-open: single user, second copy just runs */ }
         DispatcherUnhandledException += (_, args) =>
         {
             try { Logger.Log($"src=crash ui ex={args.Exception.GetType().Name} msg={args.Exception.Message}"); } catch { }
@@ -128,7 +124,6 @@ public partial class App : System.Windows.Application
     private HeurState _heurState = HeurState.Idle;
     private string? _heurExe;
     private DateTime _heurStartUtc;
-    private DateTime _heurLastActiveUtc;
     private DateTime _heurSuspectSinceUtc;
     private DateTime _heurCandSinceUtc;
     private string? _heurCandExe;
@@ -142,7 +137,7 @@ public partial class App : System.Windows.Application
         if (string.IsNullOrWhiteSpace(exe)) return false;
         if (exe.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase)) return true; // never score self
         foreach (var line in _settings.IgnoreExes)
-            if (string.Equals(ParseGameEntry(line).Exe, exe, StringComparison.OrdinalIgnoreCase)) return true;
+            if (SameExe(ParseGameEntry(line).Exe, exe)) return true;
         return GameCatalog.IsIgnore(exe);
     }
 
@@ -154,13 +149,13 @@ public partial class App : System.Windows.Application
             .Select(ParseGameEntry)
             .Where(g => g.Exe.Length > 0)
             .ToList();
-        var have = new HashSet<string>(list.Select(g => g.Exe), StringComparer.OrdinalIgnoreCase);
+        var have = new HashSet<string>(list.Select(g => ExeKey(g.Exe)), StringComparer.OrdinalIgnoreCase);
         foreach (var c in GameCatalog.Entries)
         {
             if (!c.Policy.Equals("Normal", StringComparison.OrdinalIgnoreCase)) continue;
-            if (have.Contains(c.Exe) || IsIgnored(c.Exe)) continue;
+            if (have.Contains(ExeKey(c.Exe)) || IsIgnored(c.Exe)) continue;
             list.Add((c.Exe, c.Display));
-            have.Add(c.Exe);
+            have.Add(ExeKey(c.Exe));
         }
         return list;
     }
@@ -169,9 +164,9 @@ public partial class App : System.Windows.Application
     {
         if (string.IsNullOrWhiteSpace(fg)) return;
         if (IsIgnored(fg)) return;
-        if (_settings.QuietModeExes.Any(q => string.Equals(q, fg, StringComparison.OrdinalIgnoreCase))) return;
+        if (_settings.QuietModeExes.Any(q => SameExe(q, fg))) return;
         foreach (var line in _settings.GameExes)
-            if (string.Equals(ParseGameEntry(line).Exe, fg, StringComparison.OrdinalIgnoreCase)) return;
+            if (SameExe(ParseGameEntry(line).Exe, fg)) return;
         if (GameCatalog.Find(fg) is not null) return;
         if (!_unknownSeen.Add(fg)) return; // silent after first sighting per run
         Logger.Log($"src=unknown-exe fg={fg} hint=tray");
@@ -188,17 +183,17 @@ public partial class App : System.Windows.Application
         if (string.IsNullOrWhiteSpace(fg)) return;
         if (target == "games")
         {
-            if (!_settings.GameExes.Any(l => string.Equals(ParseGameEntry(l).Exe, fg, StringComparison.OrdinalIgnoreCase)))
+            if (!_settings.GameExes.Any(l => SameExe(ParseGameEntry(l).Exe, fg)))
                 _settings.GameExes.Add(fg);
         }
         else if (target == "quiet")
         {
-            if (!_settings.QuietModeExes.Any(q => string.Equals(q, fg, StringComparison.OrdinalIgnoreCase)))
+            if (!_settings.QuietModeExes.Any(q => SameExe(q, fg)))
                 _settings.QuietModeExes.Add(fg);
         }
         else
         {
-            if (!_settings.IgnoreExes.Any(l => string.Equals(ParseGameEntry(l).Exe, fg, StringComparison.OrdinalIgnoreCase)))
+            if (!_settings.IgnoreExes.Any(l => SameExe(ParseGameEntry(l).Exe, fg)))
                 _settings.IgnoreExes.Add(fg);
         }
         _settings.Save();
@@ -232,7 +227,7 @@ public partial class App : System.Windows.Application
             {
                 foreach (var g in games)
                 {
-                    if (string.Equals(g.Exe, fg, StringComparison.OrdinalIgnoreCase)) { focused = g.Exe; break; }
+                    if (SameExe(g.Exe, fg)) { focused = g.Exe; break; }
                 }
             }
             string? active = focused;
@@ -246,7 +241,7 @@ public partial class App : System.Windows.Application
             _lastActiveGameExe = active; // feeds ShowTest wording when focus is elsewhere
             if (active is not null)
             {
-                if (!string.Equals(_gameSessionExe, active, StringComparison.OrdinalIgnoreCase) || _gameSessionStart != activeStart)
+                if (!SameExe(_gameSessionExe, active) || _gameSessionStart != activeStart)
                 {
                     _gameSessionExe = active; // new session: overdue fires on next due tick
                     _gameSessionStart = activeStart;
@@ -276,19 +271,14 @@ public partial class App : System.Windows.Application
     {
         if (string.IsNullOrWhiteSpace(exe)) return false;
         foreach (var g in EffectiveGames())
-            if (string.Equals(g.Exe, exe, StringComparison.OrdinalIgnoreCase)) return true;
+            if (SameExe(g.Exe, exe)) return true;
         return false;
-    }
-
-    private void HeurLog(string msg)
-    {
-        Logger.Log(msg);
     }
 
     private void HeurReset(string why)
     {
         if (_heurState != HeurState.Idle || _heurExe is not null || _heurCandExe is not null)
-            HeurLog($"src=heur-state to=idle why={why} exe={_heurExe ?? _heurCandExe ?? "<none>"}");
+            Logger.Log($"src=heur-state to=idle why={why} exe={_heurExe ?? _heurCandExe ?? "<none>"}");
         _heurState = HeurState.Idle;
         _heurExe = null;
         _heurCandExe = null;
@@ -305,7 +295,7 @@ public partial class App : System.Windows.Application
         }
         _gpu ??= new Heuristics.GpuSampler();
         var candidate = !string.IsNullOrWhiteSpace(fg) && !IsIgnored(fg) && !IsKnownGame(fg)
-            && !_settings.QuietModeExes.Any(q => string.Equals(q, fg, StringComparison.OrdinalIgnoreCase))
+            && !_settings.QuietModeExes.Any(q => SameExe(q, fg))
             && GameCatalog.Find(fg) is null;
         var idleSec = Heuristics.IdleSeconds();
         var fs = candidate && Heuristics.IsForegroundFullscreen();
@@ -313,7 +303,7 @@ public partial class App : System.Windows.Application
         if (!_heurInitLogged)
         {
             _heurInitLogged = true;
-            HeurLog($"src=heur-init gpuAvail={_gpu.Available} idle={idleSec}s fs={fs}");
+            Logger.Log($"src=heur-init gpuAvail={_gpu.Available} idle={idleSec}s fs={fs}");
         }
         var idleLost = idleSec > Math.Max(5, _settings.HeuristicSuspectSeconds); // AFK past threshold
         var signal = candidate && !idleLost && (fs || (gpu ?? 0) >= Math.Max(1, _settings.HeuristicGpuPercent));
@@ -321,16 +311,16 @@ public partial class App : System.Windows.Application
         switch (_heurState)
         {
             case HeurState.Idle:
-                if (signal && string.Equals(_heurCandExe, fg, StringComparison.OrdinalIgnoreCase))
+                if (signal && SameExe(_heurCandExe, fg))
                 {
                     if ((nowUtc - _heurCandSinceUtc).TotalSeconds >= _settings.HeuristicStartSeconds)
                     {
                         _heurState = HeurState.Active; // session found: sustained unknown activity
                         _heurExe = fg;
                         _heurStartUtc = _heurCandSinceUtc;
-                        _heurLastActiveUtc = nowUtc;
+
                         _heurCandExe = null;
-                        HeurLog($"src=heur-state to=active exe={fg} idle={idleSec}s fs={fs} gpu={(gpu is null ? "n/a" : $"{gpu:F0}%")}");
+                        Logger.Log($"src=heur-state to=active exe={fg} idle={idleSec}s fs={fs} gpu={(gpu is null ? "n/a" : $"{gpu:F0}%")}");
                         if (_tray is not null)
                         {
                             var tip = $"TimeNotice - session: {GameDisplayName(fg!)}";
@@ -341,18 +331,18 @@ public partial class App : System.Windows.Application
                 }
                 else if (signal)
                 {
-                    if (!string.Equals(_heurCandExe, fg, StringComparison.OrdinalIgnoreCase))
-                        HeurLog($"src=heur-cand exe={fg} gpu={(gpu is null ? "n/a" : $"{gpu:F0}%")} idle={idleSec}s fs={fs}");
+                    if (!SameExe(_heurCandExe, fg))
+                        Logger.Log($"src=heur-cand exe={fg} gpu={(gpu is null ? "n/a" : $"{gpu:F0}%")} idle={idleSec}s fs={fs}");
                     _heurCandExe = fg; // first sustained tick; dips restart the clock (conservative)
                     _heurCandSinceUtc = nowUtc;
                 }
                 else _heurCandExe = null;
                 break;
             case HeurState.Active:
-                if (signal && string.Equals(_heurExe, fg, StringComparison.OrdinalIgnoreCase))
+                if (signal && SameExe(_heurExe, fg))
                 {
-                    _heurLastActiveUtc = nowUtc;
-                    if (_gameSessionExe is null || string.Equals(_gameSessionExe, _heurExe, StringComparison.OrdinalIgnoreCase))
+
+                    if (_gameSessionExe is null || SameExe(_gameSessionExe, _heurExe))
                     {
                         _gameSessionExe = _heurExe; // bridge: game wording + elapsed reuse the heuristic clock
                         _gameSessionStart = _heurStartUtc;
@@ -368,21 +358,21 @@ public partial class App : System.Windows.Application
                 {
                     _heurState = HeurState.Suspect; // alt-tab / menu dip / short AFK: grace, no flap
                     _heurSuspectSinceUtc = nowUtc;
-                    HeurLog($"src=heur-state to=suspect exe={_heurExe} idle={idleSec}s");
+                    Logger.Log($"src=heur-state to=suspect exe={_heurExe} idle={idleSec}s");
                 }
                 break;
             case HeurState.Suspect:
-                if (signal && string.Equals(_heurExe, fg, StringComparison.OrdinalIgnoreCase))
+                if (signal && SameExe(_heurExe, fg))
                 {
                     _heurState = HeurState.Active; // recovered inside grace: session continues, clock kept
-                    _heurLastActiveUtc = nowUtc;
-                    HeurLog($"src=heur-state to=active exe={_heurExe} why=recovered");
+
+                    Logger.Log($"src=heur-state to=active exe={_heurExe} why=recovered");
                 }
                 else if ((nowUtc - _heurSuspectSinceUtc).TotalMinutes >= Math.Max(1, _settings.HeuristicInactiveMinutes))
                 {
                     var done = _heurExe;
                     _heurState = HeurState.Inactive;
-                    HeurLog($"src=heur-state to=inactive exe={done} why=timeout");
+                    Logger.Log($"src=heur-state to=inactive exe={done} why=timeout");
                     HeurReset("closed");
                 }
                 break;
@@ -400,12 +390,25 @@ public partial class App : System.Windows.Application
         return (text[..eq].Trim(), text[(eq + 1)..].Trim());
     }
 
+    // "spotify" == "spotify.exe": strip suffix once so boxes can mix forms.
+    private static bool SameExe(string? a, string? b)
+    {
+        return string.Equals(ExeKey(a), ExeKey(b), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ExeKey(string? s)
+    {
+        var t = ParseGameEntry(s ?? "").Exe.Trim();
+        if (t.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) t = t[..^4];
+        return t;
+    }
+
     private string GameDisplayName(string exe)
     {
         foreach (var line in _settings.GameExes)
         {
             var (e, name) = ParseGameEntry(line);
-            if (string.Equals(e, exe, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(name))
+            if (SameExe(e, exe) && !string.IsNullOrWhiteSpace(name))
                 return name!;
         }
         var hit = GameCatalog.Find(exe); // catalog display when user gave a bare exe
@@ -414,7 +417,9 @@ public partial class App : System.Windows.Application
         return bare.Length > 0 ? char.ToUpperInvariant(bare[0]) + bare[1..] : exe; // ponytail: auto Title-case, override with "exe = Name"
     }
 
-    private static Dictionary<string, DateTime> GetRunningGames(List<(string Exe, string? Name)> games)
+    private readonly Dictionary<string, DateTime> _startCache = new(StringComparer.OrdinalIgnoreCase);
+
+    private Dictionary<string, DateTime> GetRunningGames(List<(string Exe, string? Name)> games)
     {
         var found = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
         foreach (var (exe, _) in games)
@@ -423,18 +428,22 @@ public partial class App : System.Windows.Application
             if (procName.Length == 0) continue;
             try
             {
+                var any = false;
                 foreach (var p in System.Diagnostics.Process.GetProcessesByName(procName))
                 {
+                    any = true;
                     try
                     {
                         DateTime start;
                         try { start = p.StartTime.ToUniversalTime(); } // ponytail: UTC so DST shifts never move the session clock
-                        catch { start = DateTime.UtcNow; } // fail-open: clock starts now
+                        catch { start = _startCache.TryGetValue(exe, out var old) ? old : DateTime.UtcNow; } // elevated: reuse first-seen start, never reset to now each tick
+                        _startCache[exe] = start;
                         if (!found.TryGetValue(exe, out var cur) || start < cur)
                             found[exe] = start;
                     }
                     finally { p.Dispose(); }
                 }
+                if (!any) _startCache.Remove(exe); // exited: next launch is a new session
             }
             catch { } // ponytail: silent unknown-exe, tray hint only
         }
@@ -544,7 +553,7 @@ public partial class App : System.Windows.Application
         foreach (var line in _settings.GameExes)
         {
             var (e, name) = ParseGameEntry(line);
-            if (string.Equals(e, exe, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(name))
+            if (SameExe(e, exe) && !string.IsNullOrWhiteSpace(name))
                 return GameDisplayName(exe); // user mapping wins, never overridden
         }
         if (GameCatalog.Find(exe) is not null) return GameDisplayName(exe);
@@ -563,10 +572,11 @@ public partial class App : System.Windows.Application
         if (string.IsNullOrWhiteSpace(exe)) return;
         if (IsIgnored(exe)) return;
         if (IsKnownGame(exe)) return;
-        if (_settings.QuietModeExes.Any(q => string.Equals(q, exe, StringComparison.OrdinalIgnoreCase))) return;
+        if (_settings.QuietModeExes.Any(q => SameExe(q, exe))) return;
         if (GameCatalog.Find(exe) is not null) return;
         foreach (var line in _settings.IgnoreExes)
-            if (string.Equals(ParseGameEntry(line).Exe, exe, StringComparison.OrdinalIgnoreCase)) return;
+            if (SameExe(ParseGameEntry(line).Exe, exe)) return;
+        ClearQueue(); // confirm owns the overlay; stale queue must not overwrite its result
         _confirm = new ConfirmPrompt(_overlay, _settings, exe, AutoDisplayName(exe), OnConfirmDone, timeoutDefaultAccept: true);
         _confirm.Start();
     }
@@ -579,14 +589,23 @@ public partial class App : System.Windows.Application
         if (string.IsNullOrWhiteSpace(fg) || fg.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase))
             fg = "minecraft.exe"; // demo name when invoked from tray/desktop
         var display = AutoDisplayName(fg);
+        ClearQueue();
         _confirm = new ConfirmPrompt(_overlay, _settings, fg, display, OnConfirmDone);
         _confirm.Start();
+    }
+
+    private void ClearQueue()
+    {
+        _queuedMain = null;
+        _queuedSub = null;
+        try { _drainTimer?.Stop(); } catch { }
     }
 
     private void OnConfirmDone(string choice, string exe)
     {
         try { _confirm?.Dispose(); } catch { }
         _confirm = null;
+        try { _drainTimer?.Stop(); } catch { } // stale drain must not overwrite the receipt
         ShowOrQueue($"confirm: {choice} ({exe})", "choice saved — see debug.log", "confirm-done");
     }
 
@@ -600,9 +619,9 @@ public partial class App : System.Windows.Application
         {
             foreach (var g in EffectiveGames())
             {
-                if (string.Equals(g.Exe, fg, StringComparison.OrdinalIgnoreCase)) { gameActive = true; break; }
+                if (SameExe(g.Exe, fg)) { gameActive = true; break; }
             }
-            if (!gameActive && _heurState == HeurState.Active && string.Equals(_heurExe, fg, StringComparison.OrdinalIgnoreCase))
+            if (!gameActive && _heurState == HeurState.Active && SameExe(_heurExe, fg))
                 gameActive = true; // Phase 4 heuristic session counts as game-active
             if (!gameActive && _settings.CountWhenRunning && !string.IsNullOrWhiteSpace(_lastActiveGameExe))
                 gameActive = true; // running-counts: session on a background game
@@ -636,9 +655,9 @@ public partial class App : System.Windows.Application
             foreach (var line in _settings.GameExes)
             {
                 var (e, _) = ParseGameEntry(line);
-                if (string.Equals(e, fg, StringComparison.OrdinalIgnoreCase)) return GameDisplayName(e);
+                if (SameExe(e, fg)) return GameDisplayName(e);
             }
-            if (isGame && _heurState == HeurState.Active && string.Equals(_heurExe, fg, StringComparison.OrdinalIgnoreCase))
+            if (isGame && _heurState == HeurState.Active && SameExe(_heurExe, fg))
                 return GameDisplayName(fg); // heuristic session: Title-case, never another game's name
             if (isGame && _settings.CountWhenRunning && !string.IsNullOrWhiteSpace(_lastActiveGameExe))
                 return GameDisplayName(_lastActiveGameExe); // running-counts: name the session game, not the focused app
@@ -660,6 +679,8 @@ public partial class App : System.Windows.Application
         try { _gpu?.Dispose(); } catch { }
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); }
         try { _trayIcon?.Dispose(); } catch { }
+        try { _singleInstance?.ReleaseMutex(); _singleInstance?.Dispose(); } catch { }
+        _singleInstance = null;
         base.OnExit(e);
     }
 
@@ -667,9 +688,9 @@ public partial class App : System.Windows.Application
     {
         try
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.BeginInvoke(() =>
             {
-                HeurLog($"src=power mode={e.Mode} sessions-closed");
+                Logger.Log($"src=power mode={e.Mode} sessions-closed");
                 _gameSessionExe = null; // SCOPE §4: sleep/resume closes the session
                 HeurReset("power");
             });

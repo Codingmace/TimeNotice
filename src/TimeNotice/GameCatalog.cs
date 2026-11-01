@@ -35,8 +35,14 @@ public static class GameCatalog
     public static CatalogEntry? Find(string? exe)
     {
         if (string.IsNullOrWhiteSpace(exe)) return null;
+        var key = exe.Trim();
+        if (key.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) key = key[..^4];
         return Entries.FirstOrDefault(e =>
-            string.Equals(e.Exe, exe.Trim(), StringComparison.OrdinalIgnoreCase));
+        {
+            var c = e.Exe;
+            if (c.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) c = c[..^4];
+            return string.Equals(c, key, StringComparison.OrdinalIgnoreCase);
+        });
     }
 
     public static bool IsIgnore(string? exe) =>

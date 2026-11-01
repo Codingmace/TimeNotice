@@ -107,7 +107,7 @@ public sealed class ConfirmPrompt : IDisposable
                 var entry = _exe;
                 if (!string.IsNullOrWhiteSpace(_display) && !_display.Equals(DefaultDisplay(_exe), StringComparison.OrdinalIgnoreCase))
                     entry = $"{_exe} = {_display}"; // friendly name from window title, e.g. javaw.exe = Minecraft
-                if (!_settings.GameExes.Any(l => string.Equals(GameExeOf(l), _exe, StringComparison.OrdinalIgnoreCase)))
+                if (!_settings.GameExes.Any(l => SameExe(GameExeOf(l), _exe)))
                 {
                     _settings.GameExes.Add(entry);
                     _settings.Save();
@@ -115,7 +115,7 @@ public sealed class ConfirmPrompt : IDisposable
             }
             else if (choice.StartsWith("reject", StringComparison.OrdinalIgnoreCase))
             {
-                if (!_settings.IgnoreExes.Any(l => string.Equals(GameExeOf(l), _exe, StringComparison.OrdinalIgnoreCase)))
+                if (!_settings.IgnoreExes.Any(l => SameExe(GameExeOf(l), _exe)))
                 {
                     _settings.IgnoreExes.Add(_exe);
                     _settings.Save();
@@ -133,6 +133,19 @@ public sealed class ConfirmPrompt : IDisposable
         var t = (line ?? "").Trim();
         var eq = t.IndexOf('=');
         return eq < 0 ? t : t[..eq].Trim();
+    }
+
+    private static bool SameExe(string? a, string? b)
+    {
+        static string Key(string? s)
+        {
+            var t = (s ?? "").Trim();
+            var eq = t.IndexOf('=');
+            if (eq >= 0) t = t[..eq].Trim();
+            if (t.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) t = t[..^4];
+            return t;
+        }
+        return string.Equals(Key(a), Key(b), StringComparison.OrdinalIgnoreCase);
     }
 
     // Mirrors the Title-case fallback in App.GameDisplayName: anything richer
