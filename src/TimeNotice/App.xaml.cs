@@ -326,7 +326,7 @@ public partial class App : System.Windows.Application
                             var tip = $"TimeNotice - session: {GameDisplayName(fg!)}";
                             _tray.Text = tip.Length <= 63 ? tip : tip[..63];
                         }
-                        MaybeAutoConfirm(fg); // new heuristic session: ask once, Z=Games X=Ignored C=skip
+                        MaybeAutoConfirm(fg); // new heuristic session: ask once, Z=Games X=Ignored
                     }
                 }
                 else if (signal)
@@ -577,7 +577,7 @@ public partial class App : System.Windows.Application
         foreach (var line in _settings.IgnoreExes)
             if (SameExe(ParseGameEntry(line).Exe, exe)) return;
         ClearQueue(); // confirm owns the overlay; stale queue must not overwrite its result
-        _confirm = new ConfirmPrompt(_overlay, _settings, exe, AutoDisplayName(exe), OnConfirmDone, timeoutDefaultAccept: true);
+        _confirm = new ConfirmPrompt(_overlay, _settings, exe, AutoDisplayName(exe), OnConfirmDone);
         _confirm.Start();
     }
 

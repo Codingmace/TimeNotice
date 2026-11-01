@@ -3,7 +3,6 @@
 // them, no focus change, no hook. Modifier combo so normal typing never fires
 // it. Only active while the sticky popup is visible.
 // Fires automatically on a new heuristic session; also manual via tray test.
-// ponytail: timeout default is caller-chosen — manual test defaults accept, auto defaults accept
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 
@@ -25,7 +24,6 @@ public sealed class ConfirmPrompt : IDisposable
     private readonly string _exe;
     private readonly string _display;
     private readonly Action<string, string> _onDone;
-    private readonly bool _timeoutDefaultAccept;
     private DispatcherTimer? _poll;
     private DateTime _deadlineUtc;
     private bool _done;
@@ -34,14 +32,13 @@ public sealed class ConfirmPrompt : IDisposable
 
     public bool Active => !_done;
 
-    public ConfirmPrompt(OverlayWindow overlay, Settings settings, string exe, string display, Action<string, string> onDone, bool timeoutDefaultAccept = true)
+    public ConfirmPrompt(OverlayWindow overlay, Settings settings, string exe, string display, Action<string, string> onDone)
     {
         _overlay = overlay;
         _settings = settings;
         _exe = exe;
         _display = display;
         _onDone = onDone;
-        _timeoutDefaultAccept = timeoutDefaultAccept;
     }
 
     public void Start()
@@ -90,7 +87,7 @@ public sealed class ConfirmPrompt : IDisposable
         _prevZ = downZ; _prevX = downX;
         if (hitZ) Resolve("accept-key-Z");
         else if (hitX) Resolve("reject-key-X");
-        else if (secs <= 0) Resolve(_timeoutDefaultAccept ? "timeout-default-accept" : "timeout-default-dismiss");
+        else if (secs <= 0) Resolve("timeout-default-accept");
     }
 
     private void Resolve(string choice)
@@ -121,7 +118,6 @@ public sealed class ConfirmPrompt : IDisposable
                     _settings.Save();
                 }
             }
-            // dismiss: no settings change, re-prompts next trigger
         }
         catch { }
         Log($"src=confirm-result choice={choice} exe={_exe}");
