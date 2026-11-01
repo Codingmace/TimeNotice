@@ -45,6 +45,7 @@ public partial class App : System.Windows.Application
         {
             if (args.Button == WinForms.MouseButtons.Left) OpenSettings();
         };
+        Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerMode; // SCOPE §4: sleep/resume closes sessions
         StartScheduler();
     }
 
@@ -76,6 +77,17 @@ public partial class App : System.Windows.Application
     private DateTime _gameSessionStart;
     private readonly HashSet<string> _detectSeen = new(StringComparer.OrdinalIgnoreCase); // ponytail: cleared when process exits, relaunch re-notifies
     private readonly HashSet<string> _unknownSeen = new(StringComparer.OrdinalIgnoreCase); // ponytail: one silent log line per exe per run
+
+    // Phase 4 heuristic session (SCOPE §3-§4): IDLE -> ACTIVE -> SUSPECT -> INACTIVE.
+    private HeurState _heurState = HeurState.Idle;
+    private string? _heurExe;
+    private DateTime _heurStartUtc;
+    private DateTime _heurLastActiveUtc;
+    private DateTime _heurSuspectSinceUtc;
+    private DateTime _heurCandSinceUtc;
+    private string? _heurCandExe;
+    private Heuristics.GpuSampler? _gpu;
+    private bool _heurInitLogged;
 
     // Phase 3: self + launcher-ignore never count as gameplay. Launcher wins
     // over a Games entry for the same exe (SCOPE §5: launchers = Ignore).
@@ -201,6 +213,124 @@ public partial class App : System.Windows.Application
         {
             _lastGeneral = nowUtc;
             ShowTest("auto-general", "general");
+        }
+        UpdateHeuristic(fg, nowUtc); // Phase 4: unknown sustained sessions; never overrides a known-game session
+    }
+
+    private bool IsKnownGame(string? exe)
+    {
+        if (string.IsNullOrWhiteSpace(exe)) return false;
+        foreach (var g in EffectiveGames())
+            if (string.Equals(g.Exe, exe, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private void HeurLog(string msg)
+    {
+        try { System.IO.File.AppendAllText(System.IO.Path.Combine(Settings.Dir, "debug.log"), $"{DateTime.Now:HH:mm:ss} {msg}{System.Environment.NewLine}"); } catch { }
+    }
+
+    private void HeurReset(string why)
+    {
+        if (_heurState != HeurState.Idle || _heurExe is not null || _heurCandExe is not null)
+            HeurLog($"src=heur-state to=idle why={why} exe={_heurExe ?? _heurCandExe ?? "<none>"}");
+        _heurState = HeurState.Idle;
+        _heurExe = null;
+        _heurCandExe = null;
+        if (_gameSessionExe is not null && !IsKnownGame(_gameSessionExe))
+            _gameSessionExe = null; // drop heuristic bridge, keep known-game sessions
+    }
+
+    private void UpdateHeuristic(string? fg, DateTime nowUtc)
+    {
+        if (!_settings.HeuristicEnabled || !_settings.GameEnabled)
+        {
+            if (_heurState != HeurState.Idle || _heurExe is not null) HeurReset("disabled");
+            return;
+        }
+        _gpu ??= new Heuristics.GpuSampler();
+        var candidate = !string.IsNullOrWhiteSpace(fg) && !IsIgnored(fg) && !IsKnownGame(fg)
+            && !_settings.QuietModeExes.Any(q => string.Equals(q, fg, StringComparison.OrdinalIgnoreCase))
+            && GameCatalog.Find(fg) is null;
+        var idleSec = Heuristics.IdleSeconds();
+        var fs = candidate && Heuristics.IsForegroundFullscreen();
+        var gpu = candidate ? _gpu.SampleSum(Heuristics.ForegroundPid()) : null;
+        if (!_heurInitLogged)
+        {
+            _heurInitLogged = true;
+            HeurLog($"src=heur-init gpuAvail={_gpu.Available} idle={idleSec}s fs={fs}");
+        }
+        var idleLost = idleSec > Math.Max(5, _settings.HeuristicSuspectSeconds); // AFK past threshold
+        var signal = candidate && !idleLost && (fs || (gpu ?? 0) >= Math.Max(1, _settings.HeuristicGpuPercent));
+
+        switch (_heurState)
+        {
+            case HeurState.Idle:
+                if (signal && string.Equals(_heurCandExe, fg, StringComparison.OrdinalIgnoreCase))
+                {
+                    if ((nowUtc - _heurCandSinceUtc).TotalSeconds >= _settings.HeuristicStartSeconds)
+                    {
+                        _heurState = HeurState.Active; // session found: sustained unknown activity
+                        _heurExe = fg;
+                        _heurStartUtc = _heurCandSinceUtc;
+                        _heurLastActiveUtc = nowUtc;
+                        _heurCandExe = null;
+                        HeurLog($"src=heur-state to=active exe={fg} idle={idleSec}s fs={fs} gpu={(gpu is null ? "n/a" : $"{gpu:F0}%")}");
+                        if (_tray is not null)
+                        {
+                            var tip = $"TimeNotice - session: {GameDisplayName(fg!)}";
+                            _tray.Text = tip.Length <= 63 ? tip : tip[..63];
+                        }
+                    }
+                }
+                else if (signal)
+                {
+                    _heurCandExe = fg; // first sustained tick; dips restart the clock (conservative)
+                    _heurCandSinceUtc = nowUtc;
+                }
+                else _heurCandExe = null;
+                break;
+            case HeurState.Active:
+                if (signal && string.Equals(_heurExe, fg, StringComparison.OrdinalIgnoreCase))
+                {
+                    _heurLastActiveUtc = nowUtc;
+                    if (_gameSessionExe is null || string.Equals(_gameSessionExe, _heurExe, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _gameSessionExe = _heurExe; // bridge: game wording + elapsed reuse the heuristic clock
+                        _gameSessionStart = _heurStartUtc;
+                    }
+                    if (GameInWindow(DateTime.Now) && (nowUtc - _heurStartUtc) >= TimeSpan.FromMinutes(Math.Max(1, _settings.GameMinutes))
+                        && (nowUtc - _lastGame) >= TimeSpan.FromMinutes(Math.Max(1, _settings.GameMinutes)))
+                    {
+                        _lastGame = nowUtc;
+                        ShowTest("auto-game", "game");
+                    }
+                }
+                else
+                {
+                    _heurState = HeurState.Suspect; // alt-tab / menu dip / short AFK: grace, no flap
+                    _heurSuspectSinceUtc = nowUtc;
+                    HeurLog($"src=heur-state to=suspect exe={_heurExe} idle={idleSec}s");
+                }
+                break;
+            case HeurState.Suspect:
+                if (signal && string.Equals(_heurExe, fg, StringComparison.OrdinalIgnoreCase))
+                {
+                    _heurState = HeurState.Active; // recovered inside grace: session continues, clock kept
+                    _heurLastActiveUtc = nowUtc;
+                    HeurLog($"src=heur-state to=active exe={_heurExe} why=recovered");
+                }
+                else if ((nowUtc - _heurSuspectSinceUtc).TotalMinutes >= Math.Max(1, _settings.HeuristicInactiveMinutes))
+                {
+                    var done = _heurExe;
+                    _heurState = HeurState.Inactive;
+                    HeurLog($"src=heur-state to=inactive exe={done} why=timeout");
+                    HeurReset("closed");
+                }
+                break;
+            case HeurState.Inactive:
+                HeurReset("closed");
+                break;
         }
     }
 
@@ -357,6 +487,8 @@ public partial class App : System.Windows.Application
             {
                 if (string.Equals(g.Exe, fg, StringComparison.OrdinalIgnoreCase)) { gameActive = true; break; }
             }
+            if (!gameActive && _heurState == HeurState.Active && string.Equals(_heurExe, fg, StringComparison.OrdinalIgnoreCase))
+                gameActive = true; // Phase 4 heuristic session counts as game-active
         }
         var isGame = modeOverride?.Equals("game", StringComparison.OrdinalIgnoreCase) == true
             || (modeOverride?.Equals("general", StringComparison.OrdinalIgnoreCase) != true && gameActive && _settings.GameEnabled);
@@ -389,6 +521,8 @@ public partial class App : System.Windows.Application
                 var (e, _) = ParseGameEntry(line);
                 if (string.Equals(e, fg, StringComparison.OrdinalIgnoreCase)) return GameDisplayName(e);
             }
+            if (isGame && _heurState == HeurState.Active && string.Equals(_heurExe, fg, StringComparison.OrdinalIgnoreCase))
+                return GameDisplayName(fg); // heuristic session: Title-case, never another game's name
         }
         if (isGame)
         {
@@ -403,7 +537,23 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        try { Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerMode; } catch { }
+        try { _gpu?.Dispose(); } catch { }
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); }
         base.OnExit(e);
+    }
+
+    private void OnPowerMode(object sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+    {
+        try
+        {
+            Dispatcher.Invoke(() =>
+            {
+                HeurLog($"src=power mode={e.Mode} sessions-closed");
+                _gameSessionExe = null; // SCOPE §4: sleep/resume closes the session
+                HeurReset("power");
+            });
+        }
+        catch { }
     }
 }

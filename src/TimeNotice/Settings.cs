@@ -35,6 +35,11 @@ public sealed class Settings
     public bool PauseAll { get; set; } = false;
     public List<string> QuietModeExes { get; set; } = new() { "example-game.exe" };
     public List<string> LauncherExes { get; set; } = new();
+    public bool HeuristicEnabled { get; set; } = true;
+    public int HeuristicStartSeconds { get; set; } = 60; // sustained active before a session is found
+    public int HeuristicSuspectSeconds { get; set; } = 30; // fg loss/idle before SUSPECT
+    public int HeuristicInactiveMinutes { get; set; } = 5; // SUSPECT age before INACTIVE/close
+    public int HeuristicGpuPercent { get; set; } = 5; // per-process GPU Engine % counts as active
 
     public static string Dir => System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TimeNotice");
@@ -77,6 +82,10 @@ public sealed class Settings
         s.LauncherExes = s.LauncherExes
             .Select(x => (x ?? "").Trim()).Where(x => x.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (s.HeuristicStartSeconds < 10 || s.HeuristicStartSeconds > 600) s.HeuristicStartSeconds = 60;
+        if (s.HeuristicSuspectSeconds < 5 || s.HeuristicSuspectSeconds > 300) s.HeuristicSuspectSeconds = 30;
+        if (s.HeuristicInactiveMinutes < 1 || s.HeuristicInactiveMinutes > 60) s.HeuristicInactiveMinutes = 5;
+        if (s.HeuristicGpuPercent < 1 || s.HeuristicGpuPercent > 100) s.HeuristicGpuPercent = 5;
         return s;
     }
 

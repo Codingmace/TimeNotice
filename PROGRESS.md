@@ -50,6 +50,8 @@ dotnet run --project src/TimeNotice/TimeNotice.csproj
 | 2026-11-01 | Windows | Detection two-line format: GameDetectSubTemplate (blank=none), short main + small sub like other pops, live config split | Built 0 warn, restarted live, detects firing |
 | 2026-11-01 | Windows | DST-proof scheduler: interval/session math in UTC, time windows + display stay local; observed live clock correction 01:49→01:35 mid-session, self-healed | Built 0 warn, restarted live, firing |
 | 2026-11-01 | Windows | P3 Detection: GameCatalog (9 entries ≤12 max: 5 launcher Ignore + cs2/csgo multi-exe + eldenring + Balatro), LauncherExes setting seeded from catalog + Game-tab box, self-ignore TimeNotice.exe, unknown-exe silent log + tray tooltip, tray classify (Games/Quiet/Launchers) | Built 0 warn; live log-verified: unknown-exe Notepad line + no popup; launcher-wins both directions (opencode in Launchers = 12s silence, removed = detect+auto-game resume); Settings visuals pending user open/save |
+| 2026-11-01 | Windows | P4 heuristics: state machine (Idle/Active/Suspect/Inactive) + idle/fullscreen/GPU signals, 5 settings, tray+Settings UI, sleep closes sessions | Built 0 warn; live: heur-init gpuAvail=True, known-game path intact |
+| 2026-11-01 | Windows | P4 GPU pivot: hand-rolled PDH crashed app on first real sample (AccessViolation, missing CStatus field); replaced with System.Diagnostics.PerformanceCounter NuGet; isolated harness read 30% for AppControl pid matching Get-Counter; rebuilt, relaunched, stable | App alive, awaiting user 90s AppControl focus test |
 
 ## Ponytail debt (audit 2026-10-21, biggest first)
 - [ ] `Settings.cs`: delete `ReminderMinutes + Position` until a Phase 2 reader exists

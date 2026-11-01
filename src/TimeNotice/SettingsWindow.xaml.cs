@@ -35,6 +35,11 @@ public partial class SettingsWindow : Window
         GameNotifyBox.IsChecked = _settings.GameNotifyOnDetect;
         GameDetectTemplateBox.Text = _settings.GameDetectTemplate;
         GameDetectSubBox.Text = _settings.GameDetectSubTemplate ?? "";
+        HeurEnabledBox.IsChecked = _settings.HeuristicEnabled;
+        HeurStartBox.Text = _settings.HeuristicStartSeconds.ToString();
+        HeurSuspectBox.Text = _settings.HeuristicSuspectSeconds.ToString();
+        HeurInactiveBox.Text = _settings.HeuristicInactiveMinutes.ToString();
+        HeurGpuBox.Text = _settings.HeuristicGpuPercent.ToString();
         SelectTag(PositionBox, _settings.Position, "BottomRight");
         SelectTag(ThemeBox, _settings.ThemeMode, "Dark");
         BgBox.Text = _settings.CustomBackground;
@@ -179,6 +184,26 @@ public partial class SettingsWindow : Window
             ErrorText.Text = "Detection line cannot be empty when detection pops are on.";
             return;
         }
+        if (!int.TryParse(HeurStartBox.Text.Trim(), out var heurStart) || heurStart < 10 || heurStart > 600)
+        {
+            ErrorText.Text = "Heuristic start must be 10 to 600 seconds.";
+            return;
+        }
+        if (!int.TryParse(HeurSuspectBox.Text.Trim(), out var heurSuspect) || heurSuspect < 5 || heurSuspect > 300)
+        {
+            ErrorText.Text = "Heuristic suspect must be 5 to 300 seconds.";
+            return;
+        }
+        if (!int.TryParse(HeurInactiveBox.Text.Trim(), out var heurInactive) || heurInactive < 1 || heurInactive > 60)
+        {
+            ErrorText.Text = "Heuristic close must be 1 to 60 minutes.";
+            return;
+        }
+        if (!int.TryParse(HeurGpuBox.Text.Trim(), out var heurGpu) || heurGpu < 1 || heurGpu > 100)
+        {
+            ErrorText.Text = "Heuristic GPU % must be 1 to 100.";
+            return;
+        }
         var position = SelectedTag(PositionBox);
         if (position is not ("TopLeft" or "TopRight" or "BottomLeft" or "BottomRight"))
         {
@@ -221,6 +246,11 @@ public partial class SettingsWindow : Window
         _settings.GameNotifyOnDetect = GameNotifyBox.IsChecked == true;
         _settings.GameDetectTemplate = GameDetectTemplateBox.Text.Trim();
         _settings.GameDetectSubTemplate = GameDetectSubBox.Text.Trim();
+        _settings.HeuristicEnabled = HeurEnabledBox.IsChecked == true;
+        _settings.HeuristicStartSeconds = heurStart;
+        _settings.HeuristicSuspectSeconds = heurSuspect;
+        _settings.HeuristicInactiveMinutes = heurInactive;
+        _settings.HeuristicGpuPercent = heurGpu;
         _settings.Position = position;
         _settings.ThemeMode = theme;
         _settings.CustomBackground = BgBox.Text.Trim();
