@@ -6,6 +6,7 @@ namespace TimeNotice;
 
 public partial class App : System.Windows.Application
 {
+    private static Mutex? _singleInstance;
     private WinForms.NotifyIcon? _tray;
     private System.Drawing.Icon? _trayIcon;
     private OverlayWindow? _overlay;
@@ -17,7 +18,24 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // Single instance: second launch exits silently (tray already running).
+        _singleInstance = new Mutex(true, @"Global\TimeNotice-single", out var owned);
+        if (!owned)
+        {
+            Shutdown();
+            return;
+        }
+        DispatcherUnhandledException += (_, args) =>
+        {
+            try { Logger.Log($"src=crash ui ex={args.Exception.GetType().Name} msg={args.Exception.Message}"); } catch { }
+            args.Handled = true; // stay alive: tray app must not vanish on one bad tick
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            try { Logger.Log($"src=crash bg ex={args.ExceptionObject?.GetType().Name}"); } catch { }
+        };
         _settings = Settings.Load();
+        ApplyStartup();
         _overlay = new OverlayWindow(_settings);
         _overlay.Hidden += OnOverlayHidden;
 
@@ -53,6 +71,29 @@ public partial class App : System.Windows.Application
         StartScheduler();
     }
 
+    // Phase 6: Registry Run entry (HKCU, no elevation). Called on startup
+    // and after every Settings save (SettingsWindow passes ApplyStartup).
+    public void ApplyStartup()
+    {
+        try
+        {
+            using var run = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
+            if (run is null) return;
+            if (_settings.StartWithWindows)
+            {
+                var exe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                if (!string.IsNullOrWhiteSpace(exe))
+                    run.SetValue("TimeNotice", $"\"{exe}\"");
+            }
+            else
+            {
+                try { run.DeleteValue("TimeNotice", throwOnMissingValue: false); } catch { }
+            }
+        }
+        catch { }
+    }
+
     private void OpenSettings()
     {
         if (_settingsWindow is not null)
@@ -61,7 +102,7 @@ public partial class App : System.Windows.Application
             else _settingsWindow.Show();
             return;
         }
-        _settingsWindow = new SettingsWindow(_settings, StartScheduler);
+        _settingsWindow = new SettingsWindow(_settings, () => { ApplyStartup(); StartScheduler(); });
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
     }
@@ -133,7 +174,7 @@ public partial class App : System.Windows.Application
             if (string.Equals(ParseGameEntry(line).Exe, fg, StringComparison.OrdinalIgnoreCase)) return;
         if (GameCatalog.Find(fg) is not null) return;
         if (!_unknownSeen.Add(fg)) return; // silent after first sighting per run
-        try { System.IO.File.AppendAllText(System.IO.Path.Combine(Settings.Dir, "debug.log"), $"{DateTime.Now:HH:mm:ss} src=unknown-exe fg={fg} hint=tray{System.Environment.NewLine}"); } catch { }
+        Logger.Log($"src=unknown-exe fg={fg} hint=tray");
         if (_tray is not null)
         {
             var tip = $"TimeNotice - unknown: {fg} (right-click > Settings to classify)";
@@ -161,7 +202,7 @@ public partial class App : System.Windows.Application
                 _settings.IgnoreExes.Add(fg);
         }
         _settings.Save();
-        try { System.IO.File.AppendAllText(System.IO.Path.Combine(Settings.Dir, "debug.log"), $"{DateTime.Now:HH:mm:ss} src=classify fg={fg} target={target}{System.Environment.NewLine}"); } catch { }
+        Logger.Log($"src=classify fg={fg} target={target}");
     }
 
     private void CheckAuto()
@@ -241,7 +282,7 @@ public partial class App : System.Windows.Application
 
     private void HeurLog(string msg)
     {
-        try { System.IO.File.AppendAllText(System.IO.Path.Combine(Settings.Dir, "debug.log"), $"{DateTime.Now:HH:mm:ss} {msg}{System.Environment.NewLine}"); } catch { }
+        Logger.Log(msg);
     }
 
     private void HeurReset(string why)
@@ -413,7 +454,7 @@ public partial class App : System.Windows.Application
         var fg = NotificationPolicy.ForegroundExe();
         var suppress = NotificationPolicy.ShouldSuppress(fg, _settings);
         var display = GameDisplayName(exe);
-        try { System.IO.File.AppendAllText(System.IO.Path.Combine(Settings.Dir, "debug.log"), $"{DateTime.Now:HH:mm:ss} src=auto-detect mode=game game={display} suppress={suppress} pause={_settings.PauseAll}{System.Environment.NewLine}"); } catch { }
+        Logger.Log($"src=auto-detect mode=game game={display} suppress={suppress} pause={_settings.PauseAll}");
         if (suppress) return; // Quiet Mode / paused: silent
         var mins = Math.Max(1, _settings.GameMinutes).ToString();
         var main = (_settings.GameDetectTemplate ?? "")
@@ -447,7 +488,7 @@ public partial class App : System.Windows.Application
             _queuedMain = main;
             _queuedSub = sub;
             _queuedSource = source;
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(Settings.Dir, "debug.log"), $"{DateTime.Now:HH:mm:ss} src={(replaced ? "queued-replaced" : "queued")} orig={source}{System.Environment.NewLine}"); } catch { }
+            Logger.Log($"src={(replaced ? "queued-replaced" : "queued")} orig={source}");
             return;
         }
         _overlay.ShowReminder(main, sub);
@@ -466,7 +507,7 @@ public partial class App : System.Windows.Application
         _drainTimer.Tick += (_, _) =>
         {
             _drainTimer?.Stop();
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(Settings.Dir, "debug.log"), $"{DateTime.Now:HH:mm:ss} src=queued-shown orig={source}{System.Environment.NewLine}"); } catch { }
+            Logger.Log($"src=queued-shown orig={source}");
             _overlay?.ShowReminder(main, sub);
         };
         _drainTimer.Start();
@@ -568,7 +609,7 @@ public partial class App : System.Windows.Application
         }
         var isGame = modeOverride?.Equals("game", StringComparison.OrdinalIgnoreCase) == true
             || (modeOverride?.Equals("general", StringComparison.OrdinalIgnoreCase) != true && gameActive && _settings.GameEnabled);
-        try { System.IO.File.AppendAllText(System.IO.Path.Combine(Settings.Dir, "debug.log"), $"{DateTime.Now:HH:mm:ss} src={source} mode={(isGame ? "game" : "general")} fg={fg ?? "<null>"} suppress={suppress} pause={_settings.PauseAll} quiet=[{string.Join(",", _settings.QuietModeExes)}]{System.Environment.NewLine}"); } catch { }
+        Logger.Log($"src={source} mode={(isGame ? "game" : "general")} fg={fg ?? "<null>"} suppress={suppress} pause={_settings.PauseAll} quiet=[{string.Join(",", _settings.QuietModeExes)}]");
         if (suppress) return; // Quiet Mode / paused: silent
         var mins = isGame ? Math.Max(1, _settings.GameMinutes) : Math.Max(1, _settings.GeneralMinutes);
         var nowLocal = DateTime.Now;

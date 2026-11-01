@@ -145,7 +145,7 @@ public sealed class ConfirmPrompt : IDisposable
 
     private static void Log(string msg)
     {
-        try { System.IO.File.AppendAllText(System.IO.Path.Combine(Settings.Dir, "debug.log"), $"{DateTime.Now:HH:mm:ss} {msg}{System.Environment.NewLine}"); } catch { }
+        Logger.Log(msg);
     }
 
     public void Dispose()

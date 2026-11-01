@@ -53,6 +53,7 @@
                         <TextBlock Text="General time reminders" Style="{StaticResource CardTitle}"/>
                         <TextBlock Text="Wall-clock popups on your schedule." Style="{StaticResource Hint}"/>
                         <CheckBox x:Name="GeneralEnabledBox" Content="Enabled" IsChecked="True"/>
+                        <CheckBox x:Name="StartupBox" Content="Start with Windows"/>
                         <TextBlock Text="Every X minutes" Style="{StaticResource FieldLabel}"/>
                         <TextBox x:Name="IntervalBox" Text="30"/>
                         <CheckBox x:Name="WindowOnlyBox" Content="Only between times"/>

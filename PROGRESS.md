@@ -3,8 +3,8 @@
 Update this file every session. One row per test run.
 
 ## Current
-- Phase: 5 — satisfied on existing evidence 2026-11-01 (behavior matrix below; No Overlay dropped as unobservable, no new code needed)
-- Next action: Phase 6 hardening (fresh chat)
+- Phase: 6 — DONE 2026-11-01 (hardening verified: clean install + corrupt recovery live-tested, Defender scan clean per user)
+- Next action: V1 exit checklist sweep (§11) or public release prep
 - Open (deferred to post-Phase 6): CountWhenRunning ON-path self-test (tick box, alt-tab 2 min); Game-tab crowding polish; repo public release
 - Repo: private for now, will go public later
 - Config: reset to fresh-install defaults 2026-11-01 at user request
@@ -26,7 +26,7 @@ dotnet run --project src/TimeNotice/TimeNotice.csproj
 - [x] P3 Detection: known exe starts/stops session, ignored app not mistaken — passed 2026-11-01 per user explicit close-out
 - [x] P4 Heuristics: unknown sustained session found (AppControl via GPU, live 2026-11-01), suspect grace on focus loss logged, no flap
 - [x] P5 Safety: matrix-verified 2026-11-01 — every cell already implemented (P1 Quiet test + P3 ignore-wins test); No Overlay dropped, no new code
-- [ ] P6 Hardening: clean install, Defender scan, no invasive deps
+- [x] P6 Hardening: clean install, Defender scan, no invasive deps — DONE 2026-11-01 (fresh-profile launch OK, corrupt→backup+defaults OK, Defender clean per user, only Microsoft PerformanceCounter pkg)
 
 ## Behavior matrix (agreed 2026-11-01 — the whole notification model)
 
@@ -82,6 +82,8 @@ with no database, an invisible untracked clock is unobservable, so it added noth
 | 2026-11-01 | Windows | Auto-naming: ForegroundWindowText + GenericHostExes (javaw) + title-has-minecraft → prompt shows Minecraft, Accept stores "javaw.exe = Minecraft" | Built 0 warn, relaunched; pending live game session |
 | 2026-11-01 | Windows | Confirm fixes: auto timeout now accepts (was dismiss — footer promised Accept), footer dropped "type freely" line | Built 0 warn, relaunched; Games still empty, next session re-prompts |
 | 2026-11-01 | Windows | Confirm cleanup: stacked Accept/Reject lines, removed Dismiss keybind entirely (tray test now Z/X) | Built 0 warn, relaunched |
+| 2026-11-01 | Windows | P6 hardening: Logger (ensure-dir + 512KB rotate), single-instance mutex, crash handlers, corrupt-backup + atomic save, asInvoker manifest, Start-with-Windows checkbox + HKCU Run | Build 0 warn 0 err; Release publish OK to publish/; pending user gates: clean-install + Defender scan |
+| 2026-11-01 | Windows | P6 gates: wiped %AppData%/TimeNotice → fresh launch OK (PID 8900, dir + debug.log recreated, silent unknown-exe); garbage settings.json → corrupt backup + defaults, app alive (PID 12552); Defender clean per user; restored pre-P6 files, relaunched | P6 DONE |
 
 ## Ponytail debt (audit 2026-10-21, biggest first)
 - [ ] `Settings.cs`: delete `ReminderMinutes + Position` until a Phase 2 reader exists

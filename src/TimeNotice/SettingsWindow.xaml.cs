@@ -15,6 +15,7 @@ public partial class SettingsWindow : Window
         _settings = settings;
         _onSaved = onSaved;
         GeneralEnabledBox.IsChecked = _settings.GeneralEnabled;
+        StartupBox.IsChecked = _settings.StartWithWindows;
         IntervalBox.Text = _settings.GeneralMinutes.ToString();
         WindowOnlyBox.IsChecked = _settings.WindowOnly;
         WindowStartBox.Text = _settings.WindowStart;
@@ -225,6 +226,7 @@ public partial class SettingsWindow : Window
             if (!IsColor(SubColorBox.Text)) { ErrorText.Text = "Sub text color must look like #FFBBBBBB."; return; }
         }
         _settings.GeneralEnabled = GeneralEnabledBox.IsChecked == true;
+        _settings.StartWithWindows = StartupBox.IsChecked == true;
         _settings.GeneralMinutes = mins;
         _settings.ReminderMinutes = mins; // keep legacy in sync
         _settings.WindowOnly = WindowOnlyBox.IsChecked == true;

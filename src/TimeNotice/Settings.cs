@@ -34,6 +34,7 @@ public sealed class Settings
     public string GameDetectTemplate { get; set; } = "{game} detected"; // ponytail: {game} {interval} {time} tokens, custom line later if asked
     public string GameDetectSubTemplate { get; set; } = "Monitoring every {interval} min"; // blank = no sub line
     public bool PauseAll { get; set; } = false;
+    public bool StartWithWindows { get; set; } = false;
     public List<string> QuietModeExes { get; set; } = new() { "example-game.exe" };
     public List<string> IgnoreExes { get; set; } = new();
     // ponytail: pre-rename key — Load merges it into IgnoreExes once, then drops it; delete this property next cleanup
@@ -59,7 +60,18 @@ public sealed class Settings
             else
                 return new Settings();
         }
-        catch { /* ponytail: corrupt config falls back to defaults, repair on save */ return new Settings(); }
+        catch
+        {
+            // ponytail: corrupt config keeps a backup for diagnosis, then falls back to defaults
+            try
+            {
+                Directory.CreateDirectory(Dir);
+                var backup = System.IO.Path.Combine(Dir, $"settings.corrupt-{DateTime.Now:yyyyMMdd-HHmmss}.json");
+                File.Copy(Path, backup, overwrite: false);
+            }
+            catch { }
+            return new Settings();
+        }
         if (s.GeneralMinutes <= 0) s.GeneralMinutes = s.ReminderMinutes > 0 ? s.ReminderMinutes : 30; // migrate Phase 2 file
         s.ReminderMinutes = s.GeneralMinutes; // keep legacy in sync
         if (s.GameMinutes <= 0) s.GameMinutes = 60;
@@ -99,6 +111,9 @@ public sealed class Settings
     public void Save()
     {
         Directory.CreateDirectory(Dir);
-        File.WriteAllText(Path, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+        // Atomic write: temp + move so a crash/power loss never leaves a torn settings.json.
+        var tmp = Path + ".tmp";
+        File.WriteAllText(tmp, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+        File.Move(tmp, Path, overwrite: true);
     }
 }
