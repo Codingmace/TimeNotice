@@ -5,14 +5,24 @@ Gentle time-awareness reminders for Windows. A small tray app that shows the cur
 External overlay only. No game injection, hooks, drivers, memory reading, or cloud. See `SCOPE.md` for the locked V1 scope.
 
 ## Status
-Phase 1 — overlay proof. Scaffolded, not yet built on Windows. Track progress in `PROGRESS.md`.
+V1 feature-complete. All 6 phases passed on Windows 2026-11-01 (overlay, scheduler, detection, heuristics, safety, hardening). Defender scan clean, fresh-install + corrupt-settings recovery tested. Remaining: final V1 checklist sweep or public release prep. Track in `PROGRESS.md`.
+
+## What it does now
+- Tray app with two reminder types: general time reminders (every X min, inside a daily window) and game-session reminders (every Y min while a listed game runs).
+- Fading overlay popup (bottom-right etc.) that never steals focus or blocks clicks.
+- Game detection: known game list + ignore list + quiet list; unknown games can be spotted by activity signals and confirmed with a Yes/No keypress prompt.
+- Pause/resume (persists), Quiet Mode (named apps silence all popups), Start with Windows option.
+- Settings window (General / Game / Popup / Quiet tabs). Settings live at `%AppData%/TimeNotice/settings.json`.
 
 ## Build (Windows only, WPF does not compile on macOS)
 1. Install .NET 8 SDK x64 (`dotnet --version` → 8.x) and Git.
 2. Clone: `git clone https://github.com/Skeeee343/TimeNotice.git`
-3. Build: `dotnet build src/TimeNotice/TimeNotice.csproj`
-4. Run: `dotnet run --project src/TimeNotice/TimeNotice.csproj`
-5. Tray icon → Test reminder. Settings live at `%AppData%/TimeNotice/settings.json`.
+3. Stop any running copy first (the exe locks on rebuild): `Stop-Process -Name TimeNotice`
+4. Build: `dotnet build src/TimeNotice/TimeNotice.csproj`
+5. Run: `dotnet run --project src/TimeNotice/TimeNotice.csproj`
+6. Tray icon → Test general / Test game. Left-click tray opens Settings. Logs at `%AppData%/TimeNotice/debug.log`.
+
+Release binary: `dotnet publish src/TimeNotice/TimeNotice.csproj -c Release` (output to `publish/`). SmartScreen warning is expected until signing/reputation — see `SCOPE.md` §2.
 
 ## Docs
 - `SCOPE.md` — what V1 is and is not
