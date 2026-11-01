@@ -40,9 +40,9 @@ Date: 2026-11-01. Previous session did P1–P2 plus approved extras. App is live
 
 - XAML: attribute text starting with `{...}` needs a `{}` escape prefix.
 - `SettingsWindow.xaml.cs` needs `System.Windows.Controls.ComboBox` fully qualified (WinForms ambiguity via implicit usings).
-- PowerShell here has no `head`; use `Select-Object -First N`. Earlier `Add-Type` foreground-window snippet failed on quoting — working version saved at `C:\Users\Jourden\AppData\Local\Temp\opencode\fgcheck.ps1` (outside repo, temp only).
+- PowerShell here has no `head`; use `Select-Object -First N`. Earlier `Add-Type` foreground-window snippet failed on quoting — working version saved at the OS temp folder (outside repo, temp only).
 - `ConvertFrom-Json` objects lack new props from older files — use `Add-Member -Force` when migrating live config.
-- `git config user.name/email` is repo-local (`Jourden / yoyo3457@gmail.com`); no global identity on this PC.
+- `git config user.name/email` is repo-local; no global identity on this PC.
 
 ## Open questions for the user
 
