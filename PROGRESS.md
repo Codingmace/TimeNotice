@@ -3,8 +3,8 @@
 Update this file every session. One row per test run.
 
 ## Current
-- Phase: 3 — DONE, pending user gate (launcher-ignore + catalog + unknown-exe verified via logs 2026-11-01; Settings visuals need user open/save)
-- Next action: user gate — open Settings → Game tab shows Launchers box; known-game start/stop + launcher-not-mistaken confirm
+- Phase: 4 — DONE, gate passed live 2026-11-01 (AppControl heuristic session + suspect grace, no flap)
+- Next action: Phase 5 safety gate (per-game policy + Quiet Mode) — or pause here
 
 ## How to sync Mac <-> Windows
 ```bash
@@ -21,7 +21,7 @@ dotnet run --project src/TimeNotice/TimeNotice.csproj
 - [x] P1 Quiet gate: add `notepad.exe` to QuietModeExes in `%AppData%/TimeNotice/settings.json`, focus Notepad → Test reminder shows nothing — passed 2026-11-01 (Notepad suppress=True, Desktop showed; debug.log confirms)
 - [x] P2 Scheduler: recurring reminders + pause persists after restart — passed 2026-11-01 per user (pause/unpause confirmed; 1-min recurrence + settings persistence in debug.log across restarts)
 - [ ] P3 Detection: known exe starts/stops session, launcher not mistaken
-- [ ] P4 Heuristics: unknown sustained session found, 30s dip doesn't flap
+- [x] P4 Heuristics: unknown sustained session found (AppControl via GPU, live 2026-11-01), suspect grace on focus loss logged, no flap
 - [ ] P5 Safety: flagged exe suppresses all popups, resumes after exit
 - [ ] P6 Hardening: clean install, Defender scan, no invasive deps
 
@@ -51,7 +51,7 @@ dotnet run --project src/TimeNotice/TimeNotice.csproj
 | 2026-11-01 | Windows | DST-proof scheduler: interval/session math in UTC, time windows + display stay local; observed live clock correction 01:49→01:35 mid-session, self-healed | Built 0 warn, restarted live, firing |
 | 2026-11-01 | Windows | P3 Detection: GameCatalog (9 entries ≤12 max: 5 launcher Ignore + cs2/csgo multi-exe + eldenring + Balatro), LauncherExes setting seeded from catalog + Game-tab box, self-ignore TimeNotice.exe, unknown-exe silent log + tray tooltip, tray classify (Games/Quiet/Launchers) | Built 0 warn; live log-verified: unknown-exe Notepad line + no popup; launcher-wins both directions (opencode in Launchers = 12s silence, removed = detect+auto-game resume); Settings visuals pending user open/save |
 | 2026-11-01 | Windows | P4 heuristics: state machine (Idle/Active/Suspect/Inactive) + idle/fullscreen/GPU signals, 5 settings, tray+Settings UI, sleep closes sessions | Built 0 warn; live: heur-init gpuAvail=True, known-game path intact |
-| 2026-11-01 | Windows | P4 GPU pivot: hand-rolled PDH crashed app on first real sample (AccessViolation, missing CStatus field); replaced with System.Diagnostics.PerformanceCounter NuGet; isolated harness read 30% for AppControl pid matching Get-Counter; rebuilt, relaunched, stable | App alive, awaiting user 90s AppControl focus test |
+| 2026-11-01 | Windows | P4 gate PASS: user held AppControl maximized 30s → heur-cand (gpu=51% idle=0s) → active → auto-game reminder naming AppControl; focus return → suspect grace (no flap, no close). Restored HeuristicStartSeconds 60, rebuilt 0 warn, relaunched, committed | App stable (PID 21728), pushed |
 
 ## Ponytail debt (audit 2026-10-21, biggest first)
 - [ ] `Settings.cs`: delete `ReminderMinutes + Position` until a Phase 2 reader exists

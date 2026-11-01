@@ -150,12 +150,12 @@ public static class Heuristics
                 try
                 {
                     var c = new System.Diagnostics.PerformanceCounter("GPU Engine", "Utilization Percentage", name, readOnly: true);
-                    _ = c.NextValue(); // prime
+                    _ = c.NextValue(); // prime at creation; readings valid from the next tick
                     _counters[name] = c;
                 }
                 catch { }
             }
-            _primed = false; // new counters need one tick before readings are valid
+            // no _primed reset: existing counters keep valid readings; new ones were primed above
         }
 
         public void Dispose()

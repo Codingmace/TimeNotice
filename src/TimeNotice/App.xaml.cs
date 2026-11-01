@@ -285,6 +285,8 @@ public partial class App : System.Windows.Application
                 }
                 else if (signal)
                 {
+                    if (!string.Equals(_heurCandExe, fg, StringComparison.OrdinalIgnoreCase))
+                        HeurLog($"src=heur-cand exe={fg} gpu={(gpu is null ? "n/a" : $"{gpu:F0}%")} idle={idleSec}s fs={fs}");
                     _heurCandExe = fg; // first sustained tick; dips restart the clock (conservative)
                     _heurCandSinceUtc = nowUtc;
                 }
