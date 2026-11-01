@@ -17,7 +17,9 @@ public sealed class ConfirmPrompt : IDisposable
     private const int VK_X = 0x58;
     private const int VK_CONTROL = 0x11;
     private const int VK_MENU = 0x12; // Alt; either side counts, combo keeps game typing safe
-    private const int TimeoutSeconds = 15; // ponytail: fixed for test, settings field later if kept
+    private const int TimeoutFloorSeconds = 5; // never shorter: a missed popup must stay readable
+    private const int TimeoutCeilSeconds = 120;
+    private int _timeoutSecs = 30;
 
     private readonly OverlayWindow _overlay;
     private readonly Settings _settings;
@@ -43,16 +45,17 @@ public sealed class ConfirmPrompt : IDisposable
 
     public void Start()
     {
-        _deadlineUtc = DateTime.UtcNow.AddSeconds(TimeoutSeconds);
+        _timeoutSecs = Math.Clamp(_settings.ConfirmTimeoutSeconds, TimeoutFloorSeconds, TimeoutCeilSeconds);
+        _deadlineUtc = DateTime.UtcNow.AddSeconds(_timeoutSecs);
         // Require a fresh press: keys already held at open don't count.
         _prevZ = IsDown(VK_Z);
         _prevX = IsDown(VK_X);
-        _overlay.ShowSticky(PromptMain(), Footer(TimeoutSeconds));
-        _lastSecs = TimeoutSeconds;
+        _overlay.ShowSticky(PromptMain(), ExeLine(), Footer(_timeoutSecs));
+        _lastSecs = _timeoutSecs;
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _poll.Tick += (_, _) => Tick();
         _poll.Start();
-        Log($"src=confirm-test-shown exe={_exe} keys=Ctrl+Alt+Z/X timeout={TimeoutSeconds}s");
+        Log($"src=confirm-test-shown exe={_exe} keys=Ctrl+Alt+Z/X timeout={_timeoutSecs}s");
     }
 
     private static bool IsDown(int vk)
@@ -61,13 +64,20 @@ public sealed class ConfirmPrompt : IDisposable
         catch { return false; }
     }
 
-    private string PromptMain() =>
-        _display.Equals(_exe, StringComparison.OrdinalIgnoreCase)
-            ? $"{_display} detected — track as game?"
-            : $"{_display} ({_exe}) detected — track as game?"; // ponytail: raw exe shown so generic hosts (javaw.exe) are identifiable
+    private string PromptMain() => $"{_display} Detected";
 
-    private string Footer(int secs) =>
-        $"Ctrl+Alt+Z — Accept (auto in {secs}s)\nCtrl+Alt+X — Reject";
+    // Raw exe on its own smaller line so generic hosts (javaw.exe) stay identifiable
+    // without crowding the header. Hidden when the display name is the exe itself.
+    private string ExeLine() =>
+        _display.Equals(_exe, StringComparison.OrdinalIgnoreCase) ? "" : $"Process {_exe}";
+
+    private string Footer(int secs)
+    {
+        // The auto line marks whichever outcome the timeout applies (Settings → Popup → Confirm prompt).
+        if (_settings.ConfirmTimeoutAction.Equals("Reject", StringComparison.OrdinalIgnoreCase))
+            return $"Ctrl+Alt+Z — Accept\nCtrl+Alt+X — Reject (auto in {secs}s)";
+        return $"Ctrl+Alt+Z — Accept (auto in {secs}s)\nCtrl+Alt+X — Reject";
+    }
 
     private void Tick()
     {
@@ -76,7 +86,7 @@ public sealed class ConfirmPrompt : IDisposable
         if (secs != _lastSecs)
         {
             _lastSecs = secs;
-            _overlay.UpdateSticky(PromptMain(), Footer(secs));
+            _overlay.UpdateSticky(PromptMain(), ExeLine(), Footer(secs));
         }
         // Edge-trigger: fresh Ctrl+Alt+letter press only; held keys don't repeat-fire.
         var combo = IsDown(VK_CONTROL) && IsDown(VK_MENU);
@@ -98,50 +108,25 @@ public sealed class ConfirmPrompt : IDisposable
         try { _overlay.HideNow(); } catch { }
         try
         {
-            if (choice.StartsWith("accept-key", StringComparison.OrdinalIgnoreCase)
-                || choice.Equals("timeout-default-accept", StringComparison.OrdinalIgnoreCase))
+            var timeout = choice.StartsWith("timeout", StringComparison.OrdinalIgnoreCase);
+            var timeoutAccepts = _settings.ConfirmTimeoutAction.Equals("Accept", StringComparison.OrdinalIgnoreCase);
+            var accept = choice.StartsWith("accept-key", StringComparison.OrdinalIgnoreCase)
+                || (timeout && timeoutAccepts);
+            if (accept)
             {
-                var entry = _exe;
+                var raw = _exe;
                 if (!string.IsNullOrWhiteSpace(_display) && !_display.Equals(DefaultDisplay(_exe), StringComparison.OrdinalIgnoreCase))
-                    entry = $"{_exe} = {_display}"; // friendly name from window title, e.g. javaw.exe = Minecraft
-                if (!_settings.GameExes.Any(l => SameExe(GameExeOf(l), _exe)))
-                {
-                    _settings.GameExes.Add(entry);
-                    _settings.Save();
-                }
+                    raw = $"{_exe} = {_display}"; // friendly name from window title, e.g. javaw.exe = Minecraft
+                _settings.AddGameExe(raw); // sanitized + merged inside; timeout-accept honors the configured action
             }
-            else if (choice.StartsWith("reject", StringComparison.OrdinalIgnoreCase))
+            else if (choice.StartsWith("reject", StringComparison.OrdinalIgnoreCase) || timeout)
             {
-                if (!_settings.IgnoreExes.Any(l => SameExe(GameExeOf(l), _exe)))
-                {
-                    _settings.IgnoreExes.Add(_exe);
-                    _settings.Save();
-                }
+                _settings.AddIgnoreExe(_exe);
             }
         }
         catch { }
         Log($"src=confirm-result choice={choice} exe={_exe}");
         try { _onDone(choice, _exe); } catch { }
-    }
-
-    private static string GameExeOf(string line)
-    {
-        var t = (line ?? "").Trim();
-        var eq = t.IndexOf('=');
-        return eq < 0 ? t : t[..eq].Trim();
-    }
-
-    private static bool SameExe(string? a, string? b)
-    {
-        static string Key(string? s)
-        {
-            var t = (s ?? "").Trim();
-            var eq = t.IndexOf('=');
-            if (eq >= 0) t = t[..eq].Trim();
-            if (t.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) t = t[..^4];
-            return t;
-        }
-        return string.Equals(Key(a), Key(b), StringComparison.OrdinalIgnoreCase);
     }
 
     // Mirrors the Title-case fallback in App.GameDisplayName: anything richer

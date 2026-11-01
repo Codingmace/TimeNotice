@@ -32,6 +32,19 @@ public static class GameCatalog
         Entries.Where(e => e.Policy.Equals("Ignore", StringComparison.OrdinalIgnoreCase))
             .Select(e => e.Exe).ToList();
 
+    // GPU-spiky non-game apps (video calls, screenshare, recording): sustained GPU + focus
+    // would otherwise promote them to heuristic sessions. Ignored, never gameplay.
+    // Exe spellings are the vendor client process names; matching is case-insensitive.
+    public static List<string> DefaultExtraIgnored() => new()
+    {
+        "discord.exe",
+        "Zoom.exe",
+        "ms-teams.exe",
+        "Teams.exe",
+        "slack.exe",
+        "obs64.exe",
+    };
+
     public static CatalogEntry? Find(string? exe)
     {
         if (string.IsNullOrWhiteSpace(exe)) return null;

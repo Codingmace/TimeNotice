@@ -5,7 +5,7 @@ Update this file every session. One row per test run.
 ## Current
 - Phase: 6 — DONE 2026-11-01 (hardening verified: clean install + corrupt recovery live-tested, Defender scan clean per user)
 - Next action: V1 exit checklist sweep (§11) or public release prep
-- Open (deferred to post-Phase 6): CountWhenRunning ON-path self-test (tick box, alt-tab 2 min); Game-tab crowding polish; repo public release
+- Open (deferred to post-Phase 6): CountWhenRunning ON-path self-test (tick box, alt-tab 2 min); Game-tab crowding polish; repo public release; game+general overlap — both fire by design (late-night time awareness), reconsider game-with-time-only after user testing/feedback
 - Repo: private for now, will go public later
 - Config: reset to fresh-install defaults 2026-11-01 at user request
 
@@ -27,6 +27,7 @@ dotnet run --project src/TimeNotice/TimeNotice.csproj
 - [x] P4 Heuristics: unknown sustained session found (AppControl via GPU, live 2026-11-01), suspect grace on focus loss logged, no flap
 - [x] P5 Safety: matrix-verified 2026-11-01 — every cell already implemented (P1 Quiet test + P3 ignore-wins test); No Overlay dropped, no new code
 - [x] P6 Hardening: clean install, Defender scan, no invasive deps — DONE 2026-11-01 (fresh-profile launch OK, corrupt→backup+defaults OK, Defender clean per user, only Microsoft PerformanceCounter pkg)
+- [ ] T-gates (eng review 2026-11-01, before ship): confirm timeout default honors ConfirmTimeoutAction; confirm firing while Settings open keeps both edits; corrupt settings.json shows one balloon with backup path and stays alive
 
 ## Behavior matrix (agreed 2026-11-01 — the whole notification model)
 

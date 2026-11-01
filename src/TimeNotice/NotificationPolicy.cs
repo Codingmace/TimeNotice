@@ -15,6 +15,13 @@ public static class NotificationPolicy
 
     // Window title of the foreground window, for naming generic hosts
     // (javaw.exe serves any Java app — the title tells us which one).
+
+    public static IntPtr ForegroundWindowHandle()
+    {
+        try { return GetForegroundWindow(); }
+        catch { return IntPtr.Zero; }
+    }
+
     public static string? ForegroundWindowText()
     {
         try

@@ -12,9 +12,9 @@ public static class AppIcon
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
     private static extern bool DestroyIcon(IntPtr hIcon);
 
-    public static System.Drawing.Icon CreateTrayIcon()
+    public static System.Drawing.Icon CreateTrayIcon(bool dimmed = false)
     {
-        using var bmp = DrawBitmap();
+        using var bmp = DrawBitmap(dimmed);
         var hIcon = bmp.GetHicon();
         try
         {
@@ -39,9 +39,9 @@ public static class AppIcon
         return img;
     }
 
-    // Simple stopwatch: safety-yellow face, black rim + hands. Drawn at 32px
-    // so it stays legible scaled down to a 16px tray.
-    private static System.Drawing.Bitmap DrawBitmap()
+    // Simple stopwatch: safety-yellow face, black rim + hands, light outer halo for dark mode.
+    // Drawn at 32px so it stays legible scaled down to a 16px tray. Dimmed = gray face for suppressed state.
+    private static System.Drawing.Bitmap DrawBitmap(bool dimmed = false)
     {
         const int size = 32;
         var bmp = new System.Drawing.Bitmap(size, size, PixelFormat.Format32bppArgb);
@@ -49,10 +49,14 @@ public static class AppIcon
         {
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.Clear(System.Drawing.Color.Transparent);
-            var yellow = System.Drawing.Color.FromArgb(255, 255, 212, 0); // safety yellow
+            var yellow = dimmed
+                ? System.Drawing.Color.FromArgb(255, 140, 140, 148) // dimmed gray: suppressed, not broken
+                : System.Drawing.Color.FromArgb(255, 255, 212, 0); // safety yellow
             var black = System.Drawing.Color.FromArgb(255, 17, 17, 22);
+            var outline = System.Drawing.Color.FromArgb(255, 245, 245, 247);
             using var faceBrush = new System.Drawing.SolidBrush(yellow);
             using var blackBrush = new System.Drawing.SolidBrush(black);
+            using var halo = new System.Drawing.Pen(outline, 2f);
             using var rim = new System.Drawing.Pen(black, 2.5f);
             using var hand = new System.Drawing.Pen(black, 2f)
             {
@@ -67,7 +71,8 @@ public static class AppIcon
             g.DrawLine(hand, 23.5f, 9.5f, 27, 6);
             g.FillEllipse(blackBrush, 25, 3, 5, 5);
 
-            // Face.
+            // Face: light halo first so the black rim stays defined on dark taskbars.
+            g.DrawEllipse(halo, 4, 6, 24, 24);
             g.FillEllipse(faceBrush, 5, 7, 22, 22);
             g.DrawEllipse(rim, 5, 7, 22, 22);
 

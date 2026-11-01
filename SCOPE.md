@@ -17,7 +17,7 @@ Lightweight Windows tray app that reduces time blindness during gaming/focused u
 - Scheduled reminders: configurable interval (default 30 min), wall-clock time, optional session/next-reminder line, on/off outside games.
 - Hybrid detection: user mapping > known catalog > heuristic (foreground + GPU + fullscreen + idle).
 - Session timer with `IDLE -> ACTIVE -> SUSPECT_INACTIVE -> INACTIVE`.
-- Overlay: WPF Topmost, `ShowActivated=false`, `WS_EX_NOACTIVATE|TRANSPARENT`, click-through, corner/opacity/scale/monitor in JSON, auto-fade (default ~5s).
+- Overlay: WPF Topmost, `ShowActivated=false`, `WS_EX_NOACTIVATE|TRANSPARENT`, click-through, corner/opacity in JSON, auto-fade (default ~5s).
 - Per-game policy: Normal / No Overlay / Ignore / Quiet Mode. Centralized gate runs before any overlay. Quiet Mode suppresses all popups while detected.
 - Settings in JSON. SQLite only if history added later (deferred).
 
@@ -42,7 +42,7 @@ Allowed: user-mode Win32, perf telemetry, topmost overlay, idle status.
 Forbidden: DLL injection, memory read/write, renderer hooks, kernel drivers, file mods, input automation/bypass. Per-title caution policies stay configurable; no guarantee vs future anti-cheat.
 
 ## 8. Config model (`settings.json`)
-interval, displayDuration, showTime, showSession, generalReminders, position, scale, opacity, monitor, perApp {classification, policy}, pauseAll, startWithWindows (Registry Run).
+interval, displayDuration, showTime, showSession, generalReminders, position, opacity, perApp {classification, policy}, pauseAll, startWithWindows (Registry Run).
 
 ## 9. Explicitly deferred
 Dashboards/history, cloud/sync/upload, forced limits/lockouts, memory inspection/injection, full game DB, advanced categorization, MSIX/store, paid cert.

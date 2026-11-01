@@ -7,16 +7,25 @@ public partial class SettingsWindow : Window
 {
     private readonly Settings _settings;
     private readonly Action _onSaved;
+    private readonly Func<string, string> _gameDisplay; // App's display resolver (user mapping + catalog + Title-case)
+    private readonly HashSet<string> _openedGames; // entries present when the window opened (confirm adds merge around these)
+    private readonly HashSet<string> _openedIgnore;
+    private bool _dirty; // any control edited since open or last save
+    private bool _explicitCancel; // Cancel button means discard: skip the unsaved-changes prompt
+    private readonly System.Windows.Threading.DispatcherTimer _previewTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DateTime _previewOpenedUtc = DateTime.UtcNow;
 
-    public SettingsWindow(Settings settings, Action onSaved)
+    public SettingsWindow(Settings settings, Action onSaved, Func<string, string> gameDisplay)
     {
         InitializeComponent();
         Icon = AppIcon.CreateWindowIcon();
         _settings = settings;
         _onSaved = onSaved;
+        _gameDisplay = gameDisplay;
         GeneralEnabledBox.IsChecked = _settings.GeneralEnabled;
         StartupBox.IsChecked = _settings.StartWithWindows;
         IntervalBox.Text = _settings.GeneralMinutes.ToString();
+        AlignBox.IsChecked = _settings.AlignToClock;
         WindowOnlyBox.IsChecked = _settings.WindowOnly;
         WindowStartBox.Text = _settings.WindowStart;
         WindowEndBox.Text = _settings.WindowEnd;
@@ -48,6 +57,10 @@ public partial class SettingsWindow : Window
         BgBox.Text = _settings.CustomBackground;
         TextColorBox.Text = _settings.CustomText;
         SubColorBox.Text = _settings.CustomSubText;
+        ConfirmTimeoutBox.Text = _settings.ConfirmTimeoutSeconds.ToString();
+        SelectTag(ConfirmActionBox, _settings.ConfirmTimeoutAction, "Accept");
+        _openedGames = new HashSet<string>(_settings.GameExes.Select(Settings.ExeKey), StringComparer.OrdinalIgnoreCase);
+        _openedIgnore = new HashSet<string>(_settings.IgnoreExes.Select(Settings.ExeKey), StringComparer.OrdinalIgnoreCase);
         OpacitySlider.Value = Math.Clamp(_settings.Opacity * 100, 20, 100);
         OpacityLabel.Text = $"{(int)OpacitySlider.Value}%";
         OpacitySlider.ValueChanged += (_, e) => { OpacityLabel.Text = $"{(int)e.NewValue}%"; };
@@ -60,6 +73,8 @@ public partial class SettingsWindow : Window
         GeneralEnabledBox.Unchecked += (_, _) => UpdateWarning();
         GameEnabledBox.Checked += (_, _) => UpdateWarning();
         GameEnabledBox.Unchecked += (_, _) => UpdateWarning();
+        AlignBox.Checked += (_, _) => UpdateWarning();
+        AlignBox.Unchecked += (_, _) => UpdateWarning();
         WindowOnlyBox.Checked += (_, _) => { GeneralTimePanel.Visibility = Visibility.Visible; };
         WindowOnlyBox.Unchecked += (_, _) => { GeneralTimePanel.Visibility = Visibility.Collapsed; };
         GameWindowOnlyBox.Checked += (_, _) => { GameTimePanel.Visibility = Visibility.Visible; };
@@ -67,6 +82,37 @@ public partial class SettingsWindow : Window
         GeneralTimePanel.Visibility = WindowOnlyBox.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         GameTimePanel.Visibility = GameWindowOnlyBox.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         UpdateWarning();
+        RefreshPreviews(); // Previews tab: live from the first frame
+        _previewTimer.Tick += (_, _) => RefreshPreviews();
+        _previewTimer.Start();
+        // Dirty tracking attaches last so initialization never marks the form edited.
+        foreach (var box in new System.Windows.Controls.TextBox[] { IntervalBox, WindowStartBox, WindowEndBox, GameIntervalBox, GameBox, IgnoreBox, GameWindowStartBox, GameWindowEndBox, DisplayBox, MainTemplateBox, SubTemplateBox, GameMainBox, GameSubBox, GameDetectTemplateBox, GameDetectSubBox, QuietBox, BgBox, TextColorBox, SubColorBox, ConfirmTimeoutBox })
+            box.TextChanged += (_, _) => _dirty = true;
+        foreach (var chk in new System.Windows.Controls.CheckBox[] { GeneralEnabledBox, StartupBox, WindowOnlyBox, GameEnabledBox, CountBox, GameWindowOnlyBox, ShowNextBox, GameNotifyBox, HeurEnabledBox })
+        {
+            chk.Checked += (_, _) => _dirty = true;
+            chk.Unchecked += (_, _) => _dirty = true;
+        }
+        PositionBox.SelectionChanged += (_, _) => _dirty = true;
+        ThemeBox.SelectionChanged += (_, _) => _dirty = true;
+        ConfirmActionBox.SelectionChanged += (_, _) => _dirty = true;
+        OpacitySlider.ValueChanged += (_, _) => _dirty = true;
+        Closing += OnClosing;
+    }
+
+    // The old flow auto-saved, so a bare close discarding edits surprises. Prompt instead.
+    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        try { _previewTimer.Stop(); } catch { }
+        if (_explicitCancel || !_dirty) return;
+        var answer = System.Windows.MessageBox.Show("Save your changes?", "TimeNotice Settings",
+            MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+        if (answer == MessageBoxResult.Cancel) { e.Cancel = true; return; }
+        if (answer == MessageBoxResult.Yes)
+        {
+            Save_Click(this, new RoutedEventArgs());
+            if (_dirty) e.Cancel = true; // validation failed: stay open on the error
+        }
     }
 
     private static string SelectedTag(System.Windows.Controls.ComboBox box)
@@ -123,6 +169,99 @@ public partial class SettingsWindow : Window
         {
             WarnText.Text += "Popups will queue back-to-back (see debug.log).";
         }
+        // Hourly-grid note lives under the Align box. Above 60 min the grid is
+        // meaningless (every boundary collapses to :00), so Align disables itself.
+        // Otherwise, while Align is on, warn when the interval doesn't split 60 evenly.
+        var parsedMins = int.TryParse(IntervalBox.Text.Trim(), out var alignMins) && alignMins >= 1;
+        var overHour = parsedMins && alignMins > 60;
+        AlignBox.IsEnabled = !overHour;
+        if (overHour && AlignBox.IsChecked == true) AlignBox.IsChecked = false;
+        AlignWarnText.Visibility = Visibility.Collapsed;
+        AlignWarnText.Text = "";
+        if (overHour)
+        {
+            AlignWarnText.Text = "Align works up to 60 min — above that reminders count from launch.";
+            AlignWarnText.Visibility = Visibility.Visible;
+        }
+        else if (AlignBox.IsChecked == true && parsedMins && 60 % alignMins != 0)
+        {
+            var marks = new List<string>();
+            for (var m = 0; m < 60; m += alignMins) marks.Add($":{m:D2}");
+            AlignWarnText.Text = $"{alignMins} min doesn't split the hour evenly — alerts at {string.Join(", ", marks)}, then a short gap to :00.";
+            AlignWarnText.Visibility = Visibility.Visible;
+        }
+    }
+
+    // Previews tab: live read-only samples of every popup, expanded exactly like
+    // App.ShowTest/ShowDetect/ConfirmPrompt so what you see is what will fire.
+    private void RefreshPreviews()
+    {
+        try
+        {
+            var nowLocal = DateTime.Now;
+            var nowStr = nowLocal.ToString("h:mm tt");
+            var gmins = Math.Max(1, _settings.GeneralMinutes);
+            var ymins = Math.Max(1, _settings.GameMinutes);
+            var nextStr = (_settings.AlignToClock ? App.NextBoundary(nowLocal, gmins) : nowLocal.AddMinutes(gmins)).ToString("h:mm tt");
+            var gameNext = (_settings.AlignToClock ? App.NextBoundary(nowLocal, ymins) : nowLocal.AddMinutes(ymins)).ToString("h:mm tt");
+            var elapsed = App.FormatElapsed(DateTime.UtcNow - _previewOpenedUtc); // sample session clock
+            string exe = "newgame.exe";
+            foreach (var line in _settings.GameExes)
+            {
+                var text = line ?? "";
+                var eq = text.IndexOf('=');
+                var e = (eq < 0 ? text : text[..eq]).Trim();
+                if (e.Length > 0) { exe = e; break; }
+            }
+            var display = _gameDisplay(exe);
+            SetPreview(PvGeneralBorder, PvGeneralMain, PvGeneralSub,
+                (_settings.MainTemplate ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gmins.ToString()),
+                _settings.ShowSession ? (_settings.SubTemplate ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gmins.ToString()) : "");
+            var gm = string.IsNullOrWhiteSpace(_settings.GameMainTemplate) ? Settings.DefaultGameMainTemplate : _settings.GameMainTemplate;
+            var gs = string.IsNullOrWhiteSpace(_settings.GameSubTemplate) ? Settings.DefaultGameSubTemplate : _settings.GameSubTemplate;
+            SetPreview(PvGameBorder, PvGameMain, PvGameSub,
+                gm.Replace("{time}", nowStr).Replace("{next}", gameNext).Replace("{game}", display).Replace("{elapsed}", elapsed).Replace("{interval}", ymins.ToString()),
+                _settings.ShowSession ? gs.Replace("{time}", nowStr).Replace("{next}", gameNext).Replace("{game}", display).Replace("{elapsed}", elapsed).Replace("{interval}", ymins.ToString()) : "");
+            var dMain = (_settings.GameDetectTemplate ?? "").Replace("{game}", display).Replace("{interval}", ymins.ToString()).Replace("{time}", nowStr);
+            if (string.IsNullOrWhiteSpace(dMain)) dMain = $"{display} detected";
+            SetPreview(PvDetectBorder, PvDetectMain, PvDetectSub, dMain,
+                _settings.ShowSession ? (_settings.GameDetectSubTemplate ?? "").Replace("{game}", display).Replace("{interval}", ymins.ToString()).Replace("{time}", nowStr) : "");
+            var cMain = $"{display} Detected";
+            var cExe = display.Equals(exe, StringComparison.OrdinalIgnoreCase) ? "" : $"Process {exe}";
+            var timeout = Math.Clamp(_settings.ConfirmTimeoutSeconds, 5, 120);
+            var secs = timeout; // static sample: no reason to burn a ticking countdown in a preview
+            var cSub = _settings.ConfirmTimeoutAction.Equals("Reject", StringComparison.OrdinalIgnoreCase)
+                ? $"Ctrl+Alt+Z — Accept\nCtrl+Alt+X — Reject (auto in {secs}s)"
+                : $"Ctrl+Alt+Z — Accept (auto in {secs}s)\nCtrl+Alt+X — Reject";
+            SetPreview(PvConfirmBorder, PvConfirmMain, PvConfirmSub, cMain, cSub, cExe, PvConfirmExe);
+            SetPreview(PvAcceptBorder, PvAcceptMain, PvAcceptSub,
+                $"{display} added to Games list.", $"Current time alert interval is {ymins} min.");
+            SetPreview(PvRejectBorder, PvRejectMain, PvRejectSub,
+                $"{display} is ignored.", "No time alerts while on the ignored list.");
+        }
+        catch { }
+    }
+
+    private void SetPreview(System.Windows.Controls.Border border, System.Windows.Controls.TextBlock main, System.Windows.Controls.TextBlock sub, string mainText, string subText, string exeText = "", System.Windows.Controls.TextBlock? exeBlock = null)
+    {
+        main.Text = string.IsNullOrWhiteSpace(mainText) ? "(blank)" : mainText;
+        sub.Text = subText;
+        sub.Visibility = subText.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (exeBlock is not null)
+        {
+            exeBlock.Text = exeText;
+            exeBlock.Visibility = exeText.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        var mode = (_settings.ThemeMode ?? "Dark").Trim();
+        if (mode.Equals("MatchHost", StringComparison.OrdinalIgnoreCase)) mode = "Dark"; // preview as Dark, resolved at show time
+        string tbg = "#CC1E1E1E", tfg = "#FFFFFFFF", tsg = "#FFBBBBBB";
+        if (mode.Equals("Light", StringComparison.OrdinalIgnoreCase)) { tbg = "#FFFFFFFF"; tfg = "#FF111116"; tsg = "#FF5B5B66"; }
+        else if (mode.Equals("Custom", StringComparison.OrdinalIgnoreCase)) { tbg = _settings.CustomBackground; tfg = _settings.CustomText; tsg = _settings.CustomSubText; }
+        border.Background = new System.Windows.Media.SolidColorBrush(OverlayWindow.ParseColor(tbg, "#CC1E1E1E"));
+        main.Foreground = new System.Windows.Media.SolidColorBrush(OverlayWindow.ParseColor(tfg, "#FFFFFFFF"));
+        sub.Foreground = new System.Windows.Media.SolidColorBrush(OverlayWindow.ParseColor(tsg, "#FFBBBBBB"));
+        if (exeBlock is not null) exeBlock.Foreground = sub.Foreground;
+        border.Opacity = Math.Clamp(_settings.Opacity, 0.2, 1.0);
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
@@ -143,6 +282,13 @@ public partial class SettingsWindow : Window
             ErrorText.Text = "Seconds must be 1 to 60.";
             return;
         }
+        if (!int.TryParse(ConfirmTimeoutBox.Text.Trim(), out var confirmSecs) || confirmSecs < 5 || confirmSecs > 120)
+        {
+            ErrorText.Text = "Confirm wait must be 5 to 120 seconds.";
+            return;
+        }
+        var confirmAction = SelectedTag(ConfirmActionBox);
+        if (confirmAction is not ("Accept" or "Reject")) confirmAction = "Accept";
         if (!TimeSpan.TryParse(WindowStartBox.Text.Trim(), out _))
         {
             ErrorText.Text = "From time must look like 09:00.";
@@ -228,6 +374,7 @@ public partial class SettingsWindow : Window
         _settings.GeneralEnabled = GeneralEnabledBox.IsChecked == true;
         _settings.StartWithWindows = StartupBox.IsChecked == true;
         _settings.GeneralMinutes = mins;
+        _settings.AlignToClock = AlignBox.IsChecked == true;
         _settings.ReminderMinutes = mins; // keep legacy in sync
         _settings.WindowOnly = WindowOnlyBox.IsChecked == true;
         _settings.WindowStart = WindowStartBox.Text.Trim();
@@ -235,10 +382,8 @@ public partial class SettingsWindow : Window
         _settings.GameEnabled = GameEnabledBox.IsChecked == true;
         _settings.GameMinutes = gmin;
         _settings.CountWhenRunning = CountBox.IsChecked == true;
-        _settings.GameExes = GameBox.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
-        _settings.IgnoreExes = IgnoreBox.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+        _settings.GameExes = MergeBoxLines(GameBox.Text, _settings.GameExes, _openedGames);
+        _settings.IgnoreExes = MergeBoxLines(IgnoreBox.Text, _settings.IgnoreExes, _openedIgnore);
         _settings.GameWindowOnly = GameWindowOnlyBox.IsChecked == true;
         _settings.GameWindowStart = GameWindowStartBox.Text.Trim();
         _settings.GameWindowEnd = GameWindowEndBox.Text.Trim();
@@ -264,10 +409,33 @@ public partial class SettingsWindow : Window
         _settings.Opacity = Math.Clamp(OpacitySlider.Value / 100.0, 0.2, 1.0);
         _settings.QuietModeExes = QuietBox.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+        _settings.ConfirmTimeoutSeconds = confirmSecs;
+        _settings.ConfirmTimeoutAction = confirmAction;
+        _settings.Normalize(); // clamp, sanitize, dedupe after every save
         _settings.Save();
         _onSaved();
+        _dirty = false;
         Close();
     }
 
-    private void Cancel_Click(object sender, RoutedEventArgs e) => Close();
+    // Box lines win, except entries added elsewhere while the window was open
+    // (e.g. a confirm prompt): those merge in. Lines the user deleted stay deleted.
+    private static List<string> MergeBoxLines(string boxText, List<string> live, HashSet<string> opened)
+    {
+        var box = boxText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+        foreach (var e in live)
+        {
+            if (!opened.Contains(Settings.ExeKey(e))
+                && !box.Any(b => string.Equals(Settings.ExeKey(b), Settings.ExeKey(e), StringComparison.OrdinalIgnoreCase)))
+                box.Add(e.Trim());
+        }
+        return box;
+    }
+
+    private void Cancel_Click(object sender, RoutedEventArgs e)
+    {
+        _explicitCancel = true; // intentional discard: no prompt
+        Close();
+    }
 }

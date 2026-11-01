@@ -9,6 +9,7 @@ public partial class App : System.Windows.Application
     private static Mutex? _singleInstance;
     private WinForms.NotifyIcon? _tray;
     private System.Drawing.Icon? _trayIcon;
+    private System.Drawing.Icon? _trayIconDim; // cached once: dimmed face while suppressed, no per-tick handles
     private OverlayWindow? _overlay;
     private Settings _settings = new();
     private DispatcherTimer? _scheduler;
@@ -36,7 +37,8 @@ public partial class App : System.Windows.Application
         _overlay.Hidden += OnOverlayHidden;
 
         // ponytail: shared AppIcon helper; a .ico file replaces this if the Explorer exe icon needs branding too
-        _trayIcon = AppIcon.CreateTrayIcon();
+        _trayIcon = AppIcon.CreateTrayIcon(dimmed: false);
+        _trayIconDim = AppIcon.CreateTrayIcon(dimmed: true);
         _tray = new WinForms.NotifyIcon
         {
             Icon = _trayIcon,
@@ -44,12 +46,9 @@ public partial class App : System.Windows.Application
             Text = "TimeNotice"
         };
         _tray.ContextMenuStrip = new WinForms.ContextMenuStrip();
-        _tray.ContextMenuStrip.Items.Add("Test general reminder", null, (_, _) => ShowTest("manual-general", "general"));
-        _tray.ContextMenuStrip.Items.Add("Test game reminder", null, (_, _) => ShowTest("manual-game", "game"));
-        _tray.ContextMenuStrip.Items.Add("Test confirm (Z/X)", null, (_, _) => TestConfirm());
-        _tray.ContextMenuStrip.Items.Add("Add focused app to Games", null, (_, _) => ClassifyFocused("games"));
-        _tray.ContextMenuStrip.Items.Add("Add focused app to Quiet", null, (_, _) => ClassifyFocused("quiet"));
-        _tray.ContextMenuStrip.Items.Add("Add focused app to Ignored", null, (_, _) => ClassifyFocused("ignored"));
+        // Status first (refreshed on open), then act, classify, test, exit. Test items live last: they are dev tools, not daily use.
+        var statusItem = new WinForms.ToolStripMenuItem("TimeNotice") { Enabled = false };
+        _tray.ContextMenuStrip.Items.Add(statusItem);
         var pauseItem = new WinForms.ToolStripMenuItem("Pause") { Checked = _settings.PauseAll, CheckOnClick = true };
         pauseItem.CheckedChanged += (_, _) =>
         {
@@ -58,12 +57,36 @@ public partial class App : System.Windows.Application
         };
         _tray.ContextMenuStrip.Items.Add(pauseItem);
         _tray.ContextMenuStrip.Items.Add("Settings…", null, (_, _) => OpenSettings());
+        _tray.ContextMenuStrip.Items.Add(new WinForms.ToolStripSeparator());
+        _tray.ContextMenuStrip.Items.Add("Add focused app to Games", null, (_, _) => ClassifyFocused("games"));
+        _tray.ContextMenuStrip.Items.Add("Add focused app to Quiet", null, (_, _) => ClassifyFocused("quiet"));
+        _tray.ContextMenuStrip.Items.Add("Add focused app to Ignored", null, (_, _) => ClassifyFocused("ignored"));
+        _tray.ContextMenuStrip.Items.Add(new WinForms.ToolStripSeparator());
+        _tray.ContextMenuStrip.Items.Add("Test general reminder", null, (_, _) => ShowTest("manual-general", "general"));
+        _tray.ContextMenuStrip.Items.Add("Test game reminder", null, (_, _) => ShowTest("manual-game", "game"));
+        _tray.ContextMenuStrip.Items.Add("Test confirm (Z/X)", null, (_, _) => TestConfirm());
+        _tray.ContextMenuStrip.Items.Add(new WinForms.ToolStripSeparator());
         _tray.ContextMenuStrip.Items.Add("Exit", null, (_, _) => Shutdown());
+        _tray.ContextMenuStrip.Opening += (_, _) => RefreshTrayMenu(statusItem, pauseItem);
         _tray.MouseClick += (_, args) =>
         {
             if (args.Button == WinForms.MouseButtons.Left) OpenSettings();
         };
         Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerMode; // SCOPE §4: sleep/resume closes sessions
+        if (_settings.WasResetFromCorrupt)
+        {
+            var where = _settings.CorruptBackupPath;
+            Logger.Log($"src=config-reset backup={where ?? "<backup-failed>"}");
+            try
+            {
+                _tray.ShowBalloonTip(8000, "TimeNotice settings were reset",
+                    string.IsNullOrWhiteSpace(where)
+                        ? "The settings file was unreadable and could not be backed up."
+                        : $"The settings file was unreadable. A backup was saved at {where}.",
+                    WinForms.ToolTipIcon.Warning);
+            }
+            catch { }
+        }
         StartScheduler();
     }
 
@@ -98,9 +121,34 @@ public partial class App : System.Windows.Application
             else _settingsWindow.Show();
             return;
         }
-        _settingsWindow = new SettingsWindow(_settings, () => { ApplyStartup(); StartScheduler(); });
+        _settingsWindow = new SettingsWindow(_settings, () => { ApplyStartup(); StartScheduler(); }, GameDisplayName);
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
+    }
+
+    // Status header + tooltip + icon, refreshed on every menu open so Quiet/Pause
+    // never looks identical to broken. Icons are cached once: no per-tick GDI handles.
+    private void RefreshTrayMenu(WinForms.ToolStripMenuItem status, WinForms.ToolStripMenuItem pause)
+    {
+        try
+        {
+            var fg = NotificationPolicy.ForegroundExe();
+            var suppressed = _settings.PauseAll || NotificationPolicy.ShouldSuppress(fg, _settings);
+            string text;
+            if (_settings.PauseAll) text = "Paused — no popups";
+            else if (!string.IsNullOrWhiteSpace(fg) && NotificationPolicy.ShouldSuppress(fg, _settings))
+                text = $"Quiet: {fg} focused — silent";
+            else text = "Running — popups on schedule";
+            status.Text = text;
+            pause.Checked = _settings.PauseAll;
+            if (_tray is not null)
+            {
+                var tip = $"TimeNotice - {text}";
+                _tray.Text = tip.Length <= 63 ? tip : tip[..63];
+                _tray.Icon = (suppressed && _trayIconDim is not null) ? _trayIconDim : _trayIcon;
+            }
+        }
+        catch { }
     }
 
     private void StartScheduler()
@@ -247,8 +295,7 @@ public partial class App : System.Windows.Application
                     _gameSessionStart = activeStart;
                     _lastGame = activeStart;
                 }
-                if (GameInWindow(nowLocal) && (nowUtc - _gameSessionStart) >= TimeSpan.FromMinutes(Math.Max(1, _settings.GameMinutes))
-                    && (nowUtc - _lastGame) >= TimeSpan.FromMinutes(Math.Max(1, _settings.GameMinutes)))
+                if (GameInWindow(nowLocal) && IsGameDue(nowUtc, nowLocal, _gameSessionStart, _lastGame, Math.Max(1, _settings.GameMinutes)))
                 {
                     _lastGame = nowUtc;
                     ShowTest("auto-game", "game");
@@ -259,7 +306,7 @@ public partial class App : System.Windows.Application
                 _gameSessionExe = null; // no focused game: keep detect memory, drop session
             }
         }
-        if (_settings.GeneralEnabled && InWindow(nowLocal) && (nowUtc - _lastGeneral) >= TimeSpan.FromMinutes(Math.Max(1, _settings.GeneralMinutes)))
+        if (_settings.GeneralEnabled && InWindow(nowLocal) && IsGeneralDue(nowUtc, nowLocal, _lastGeneral, Math.Max(1, _settings.GeneralMinutes)))
         {
             _lastGeneral = nowUtc;
             ShowTest("auto-general", "general");
@@ -347,8 +394,7 @@ public partial class App : System.Windows.Application
                         _gameSessionExe = _heurExe; // bridge: game wording + elapsed reuse the heuristic clock
                         _gameSessionStart = _heurStartUtc;
                     }
-                    if (GameInWindow(DateTime.Now) && (nowUtc - _heurStartUtc) >= TimeSpan.FromMinutes(Math.Max(1, _settings.GameMinutes))
-                        && (nowUtc - _lastGame) >= TimeSpan.FromMinutes(Math.Max(1, _settings.GameMinutes)))
+                    if (GameInWindow(DateTime.Now) && IsGameDue(nowUtc, DateTime.Now, _heurStartUtc, _lastGame, Math.Max(1, _settings.GameMinutes)))
                     {
                         _lastGame = nowUtc;
                         ShowTest("auto-game", "game");
@@ -398,9 +444,7 @@ public partial class App : System.Windows.Application
 
     private static string ExeKey(string? s)
     {
-        var t = ParseGameEntry(s ?? "").Exe.Trim();
-        if (t.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) t = t[..^4];
-        return t;
+        return Settings.ExeKey(s); // single definition lives on Settings (Load/Normalize share it)
     }
 
     private string GameDisplayName(string exe)
@@ -450,7 +494,7 @@ public partial class App : System.Windows.Application
         return found;
     }
 
-    private static string FormatElapsed(TimeSpan span)
+    internal static string FormatElapsed(TimeSpan span)
     {
         var mins = Math.Max(0, (int)Math.Floor(span.TotalMinutes));
         if (mins < 60) return $"{mins} min";
@@ -491,6 +535,13 @@ public partial class App : System.Windows.Application
     private void ShowOrQueue(string main, string sub, string source)
     {
         if (_overlay is null) return;
+        if (_confirm is { Active: true })
+        {
+            // A confirm owns the overlay: scheduler ticks must not queue behind the sticky prompt
+            // and overwrite its result (a 30s window doubles the exposure). The poll retries next tick.
+            Logger.Log($"src=suppressed-while-confirm orig={source}");
+            return;
+        }
         if (_overlay.IsShowing)
         {
             var replaced = _queuedMain is not null;
@@ -540,6 +591,38 @@ public partial class App : System.Windows.Application
         var t = now.TimeOfDay;
         if (start <= end) return t >= start && t < end;
         return t >= start || t < end; // overnight, e.g. 22:00-07:00
+    }
+
+    // Align-to-each-hour: grid resets every hour (30 min -> :00/:30, 7 min -> :00/:07/.../:56).
+    // Elapsed mode stays DST-proof UTC; aligned mode is wall-clock by intent.
+    private static DateTime FloorBoundary(DateTime nowLocal, int minutes)
+    {
+        minutes = Math.Max(1, minutes);
+        var hourStart = nowLocal.Date.AddHours(nowLocal.Hour);
+        var elapsed = (nowLocal - hourStart).TotalMinutes;
+        return hourStart.AddMinutes(Math.Floor(elapsed / minutes) * minutes);
+    }
+
+    internal static DateTime NextBoundary(DateTime nowLocal, int minutes)
+    {
+        // Next is strictly after now: on-the-boundary ticks show the coming
+        // boundary, never now (which rendered "It is now 5:15, Next: 5:15").
+        return FloorBoundary(nowLocal, minutes).AddMinutes(Math.Max(1, minutes));
+    }
+
+    private bool IsGeneralDue(DateTime nowUtc, DateTime nowLocal, DateTime lastUtc, int minutes)
+    {
+        if (!_settings.AlignToClock)
+            return (nowUtc - lastUtc) >= TimeSpan.FromMinutes(minutes);
+        return FloorBoundary(nowLocal, minutes) > lastUtc.ToLocalTime();
+    }
+
+    private bool IsGameDue(DateTime nowUtc, DateTime nowLocal, DateTime sessionStartUtc, DateTime lastUtc, int minutes)
+    {
+        // Game alerts never align to the clock: sessions start mid-hour, so elapsed time is the honest measure.
+        // AlignToClock applies to general reminders only (hour-anchored grid).
+        return (nowUtc - sessionStartUtc) >= TimeSpan.FromMinutes(minutes)
+            && (nowUtc - lastUtc) >= TimeSpan.FromMinutes(minutes);
     }
 
     // Auto confirm: first tick of a new heuristic session asks once.
@@ -606,7 +689,15 @@ public partial class App : System.Windows.Application
         try { _confirm?.Dispose(); } catch { }
         _confirm = null;
         try { _drainTimer?.Stop(); } catch { } // stale drain must not overwrite the receipt
-        ShowOrQueue($"confirm: {choice} ({exe})", "choice saved — see debug.log", "confirm-done");
+        var accepted = choice.StartsWith("accept-key", StringComparison.OrdinalIgnoreCase)
+            || choice.Equals("timeout-default-accept", StringComparison.OrdinalIgnoreCase);
+        if (accepted) _detectSeen.Add(exe); // just approved: skip the follow-up "matched" pop for this game
+        var display = GameDisplayName(exe);
+        var main = accepted
+            ? $"{display} added to Games list."
+            : $"{display} is ignored.";
+        var sub = accepted ? $"Current time alert interval is {Math.Max(1, _settings.GameMinutes)} min." : "No time alerts while on the ignored list.";
+        ShowOrQueue(main, sub, "confirm-done");
     }
 
     private void ShowTest(string source = "manual", string? modeOverride = null)
@@ -633,11 +724,15 @@ public partial class App : System.Windows.Application
         var mins = isGame ? Math.Max(1, _settings.GameMinutes) : Math.Max(1, _settings.GeneralMinutes);
         var nowLocal = DateTime.Now;
         var nowStr = nowLocal.ToString("h:mm tt");
-        var nextStr = nowLocal.AddMinutes(mins).ToString("h:mm tt");
+        var nextStr = (_settings.AlignToClock ? NextBoundary(nowLocal, mins) : nowLocal.AddMinutes(mins)).ToString("h:mm tt");
         var gameDisplay = ResolveGameDisplay(fg, isGame);
         var elapsed = isGame && _gameSessionExe is not null ? FormatElapsed(DateTime.UtcNow - _gameSessionStart) : (isGame ? "0 min" : "");
-        var mainTpl = (isGame && !string.IsNullOrWhiteSpace(_settings.GameMainTemplate)) ? _settings.GameMainTemplate : _settings.MainTemplate;
-        var subTpl = (isGame && !string.IsNullOrWhiteSpace(_settings.GameSubTemplate)) ? _settings.GameSubTemplate : _settings.SubTemplate;
+        var mainTpl = isGame
+            ? (string.IsNullOrWhiteSpace(_settings.GameMainTemplate) ? Settings.DefaultGameMainTemplate : _settings.GameMainTemplate)
+            : _settings.MainTemplate;
+        var subTpl = isGame
+            ? (string.IsNullOrWhiteSpace(_settings.GameSubTemplate) ? Settings.DefaultGameSubTemplate : _settings.GameSubTemplate)
+            : _settings.SubTemplate;
         var main = (mainTpl ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", gameDisplay).Replace("{elapsed}", elapsed).Replace("{interval}", mins.ToString());
         if (string.IsNullOrWhiteSpace(main)) main = nowStr;
         var sub = "";
@@ -679,6 +774,7 @@ public partial class App : System.Windows.Application
         try { _gpu?.Dispose(); } catch { }
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); }
         try { _trayIcon?.Dispose(); } catch { }
+        try { _trayIconDim?.Dispose(); } catch { }
         try { _singleInstance?.ReleaseMutex(); _singleInstance?.Dispose(); } catch { }
         _singleInstance = null;
         base.OnExit(e);

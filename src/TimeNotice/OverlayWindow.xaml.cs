@@ -40,6 +40,7 @@ public partial class OverlayWindow : Window
     {
         BeginAnimation(OpacityProperty, null); // clear fade hold so re-show is visible
         TimeText.Text = timeText;
+        SetExe(null); // reminders never show the exe line
         SubText.Text = subText ?? (_settings.ShowSession ? "TimeNotice test — no focus steal" : "");
         ApplyTheme();
         if (Visibility != Visibility.Visible) Show();
@@ -52,10 +53,11 @@ public partial class OverlayWindow : Window
 
     // Sticky confirm (test): shows without auto-hide so a 15s poll can own
     // the countdown. Still NOACTIVATE + TRANSPARENT: no focus steal, click-through.
-    public void ShowSticky(string main, string? sub)
+    public void ShowSticky(string main, string? exe, string? sub)
     {
         BeginAnimation(OpacityProperty, null);
         TimeText.Text = main;
+        SetExe(exe);
         SubText.Text = sub ?? "";
         ApplyTheme();
         if (Visibility != Visibility.Visible) Show();
@@ -64,13 +66,20 @@ public partial class OverlayWindow : Window
         _hideTimer.Stop();
     }
 
-    public void UpdateSticky(string main, string? sub)
+    public void UpdateSticky(string main, string? exe, string? sub)
     {
         if (Visibility != Visibility.Visible) return;
         TimeText.Text = main;
+        SetExe(exe);
         SubText.Text = sub ?? "";
         UpdateLayout();
         Position();
+    }
+
+    private void SetExe(string? exe)
+    {
+        ExeText.Text = exe ?? "";
+        ExeText.Visibility = string.IsNullOrWhiteSpace(exe) ? Visibility.Collapsed : Visibility.Visible;
     }
 
     public void HideNow()
@@ -98,13 +107,14 @@ public partial class OverlayWindow : Window
         PopupBorder.Background = new System.Windows.Media.SolidColorBrush(ParseColor(bg, "#CC1E1E1E"));
         TimeText.Foreground = new System.Windows.Media.SolidColorBrush(ParseColor(fg, "#FFFFFFFF"));
         SubText.Foreground = new System.Windows.Media.SolidColorBrush(ParseColor(sub, "#FFBBBBBB"));
+        ExeText.Foreground = SubText.Foreground;
         var op = _settings.Opacity;
         if (op < 0.2) op = 0.2;
         if (op > 1.0) op = 1.0;
         Opacity = op;
     }
 
-    private static System.Windows.Media.Color ParseColor(string? text, string fallback)
+    internal static System.Windows.Media.Color ParseColor(string? text, string fallback)
     {
         foreach (var candidate in new[] { text ?? "", fallback })
         {
@@ -134,6 +144,28 @@ public partial class OverlayWindow : Window
     private void Position()
     {
         var area = SystemParameters.WorkArea;
+        try
+        {
+            // Anchor to the focused app's monitor, converted to WPF units: Screen/Monitor APIs
+            // report physical pixels, which misplaces the popup on mixed-DPI setups without this.
+            // DXGI exclusive-fullscreen bypasses DWM, so no WPF window appears there — borderless only.
+            var hwnd = NotificationPolicy.ForegroundWindowHandle();
+            if (hwnd != IntPtr.Zero)
+            {
+                var mi = new MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<MONITORINFO>() };
+                if (GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), ref mi))
+                {
+                    // Monitor APIs report physical pixels; WPF positions in device-independent units.
+                    double scale = 1.0;
+                    try { scale = GetDpiForWindow(hwnd) / 96.0; } catch { }
+                    if (scale <= 0) scale = 1.0;
+                    var tl = new System.Windows.Point(mi.rcWork.Left * scale, mi.rcWork.Top * scale);
+                    var br = new System.Windows.Point(mi.rcWork.Right * scale, mi.rcWork.Bottom * scale);
+                    area = new Rect(tl, br);
+                }
+            }
+        }
+        catch { } // fail-safe: primary WorkArea above
         var w = ActualWidth > 0 ? ActualWidth : Width; // ponytail: SizeToContent makes Height auto, so anchor on rendered size
         var h = ActualHeight > 0 ? ActualHeight : 90;
         var pos = (_settings.Position ?? "BottomRight").Trim();
@@ -171,4 +203,27 @@ public partial class OverlayWindow : Window
     private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd); // Win10 1607+, project floor is 1809
+
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+    }
 }

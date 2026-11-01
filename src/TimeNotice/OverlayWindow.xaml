@@ -7,6 +7,7 @@
     <Border x:Name="PopupBorder" CornerRadius="10" Background="#CC1E1E1E" Padding="14,10">
         <StackPanel>
             <TextBlock x:Name="TimeText" Foreground="White" FontSize="26" FontWeight="SemiBold" Text="9:30 PM" TextWrapping="Wrap"/>
+            <TextBlock x:Name="ExeText" Foreground="#FFBBBBBB" FontSize="14" TextWrapping="Wrap" Visibility="Collapsed"/>
             <TextBlock x:Name="SubText" Foreground="#FFBBBBBB" FontSize="13" Text="TimeNotice test" TextWrapping="Wrap"/>
         </StackPanel>
     </Border>
