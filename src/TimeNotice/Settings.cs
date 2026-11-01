@@ -13,6 +13,7 @@ public sealed class Settings
     public string WindowEnd { get; set; } = "23:00";
     public bool GameEnabled { get; set; } = false;
     public int GameMinutes { get; set; } = 60;
+    public bool CountWhenRunning { get; set; } = false; // optional: session follows a running game, focus not needed
     public List<string> GameExes { get; set; } = new();
     public bool GameWindowOnly { get; set; } = false;
     public string GameWindowStart { get; set; } = "09:00"; // ponytail: HH:mm text, TimePicker upgrade if asked

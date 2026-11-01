@@ -20,6 +20,7 @@ public partial class SettingsWindow : Window
         WindowEndBox.Text = _settings.WindowEnd;
         GameEnabledBox.IsChecked = _settings.GameEnabled;
         GameIntervalBox.Text = _settings.GameMinutes.ToString();
+        CountBox.IsChecked = _settings.CountWhenRunning;
         GameBox.Text = string.Join("\n", _settings.GameExes);
         LauncherBox.Text = string.Join("\n", _settings.LauncherExes);
         GameWindowOnlyBox.IsChecked = _settings.GameWindowOnly;
@@ -230,6 +231,7 @@ public partial class SettingsWindow : Window
         _settings.WindowEnd = WindowEndBox.Text.Trim();
         _settings.GameEnabled = GameEnabledBox.IsChecked == true;
         _settings.GameMinutes = gmin;
+        _settings.CountWhenRunning = CountBox.IsChecked == true;
         _settings.GameExes = GameBox.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
         _settings.LauncherExes = LauncherBox.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)

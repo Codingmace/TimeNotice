@@ -82,6 +82,7 @@
                         <CheckBox x:Name="GameEnabledBox" Content="Enabled"/>
                         <TextBlock Text="Every Y minutes while game is active" Style="{StaticResource FieldLabel}"/>
                         <TextBox x:Name="GameIntervalBox" Text="60"/>
+                        <CheckBox x:Name="CountBox" Content="Count while merely running (no focus needed)"/>
                         <TextBlock Text="Games (one exe per line — spotify.exe = Spotify)" Style="{StaticResource FieldLabel}"/>
                         <TextBox x:Name="GameBox" Height="70"
                                  AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>

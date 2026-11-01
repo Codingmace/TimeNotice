@@ -5,6 +5,7 @@ Update this file every session. One row per test run.
 ## Current
 - Phase: 4 — DONE, gate passed live 2026-11-01 (AppControl heuristic session + suspect grace, no flap)
 - Next action: Phase 5 safety gate (per-game policy + Quiet Mode) — or pause here
+- Open: CountWhenRunning self-test (user: check box, alt-tab to desktop 2 min, reminders continue)
 
 ## How to sync Mac <-> Windows
 ```bash
@@ -52,6 +53,7 @@ dotnet run --project src/TimeNotice/TimeNotice.csproj
 | 2026-11-01 | Windows | P3 Detection: GameCatalog (9 entries ≤12 max: 5 launcher Ignore + cs2/csgo multi-exe + eldenring + Balatro), LauncherExes setting seeded from catalog + Game-tab box, self-ignore TimeNotice.exe, unknown-exe silent log + tray tooltip, tray classify (Games/Quiet/Launchers) | Built 0 warn; live log-verified: unknown-exe Notepad line + no popup; launcher-wins both directions (opencode in Launchers = 12s silence, removed = detect+auto-game resume); Settings visuals pending user open/save |
 | 2026-11-01 | Windows | P4 heuristics: state machine (Idle/Active/Suspect/Inactive) + idle/fullscreen/GPU signals, 5 settings, tray+Settings UI, sleep closes sessions | Built 0 warn; live: heur-init gpuAvail=True, known-game path intact |
 | 2026-11-01 | Windows | P4 gate PASS: user held AppControl maximized 30s → heur-cand (gpu=51% idle=0s) → active → auto-game reminder naming AppControl; focus return → suspect grace (no flap, no close). Restored HeuristicStartSeconds 60, rebuilt 0 warn, relaunched, committed | App stable (PID 21728), pushed |
+| 2026-11-01 | Windows | Running-counts toggle: CountWhenRunning (default off, Game tab checkbox) — session follows earliest-running listed game without focus; focused still wins; wording names the session game; heuristic still focus-only | Built 0 warn; default-off regression live (detect+game normal); ON-path left to user self-test |
 
 ## Ponytail debt (audit 2026-10-21, biggest first)
 - [ ] `Settings.cs`: delete `ReminderMinutes + Position` until a Phase 2 reader exists

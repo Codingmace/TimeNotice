@@ -74,6 +74,7 @@ public partial class App : System.Windows.Application
     private DateTime _lastGeneral;
     private DateTime _lastGame;
     private string? _gameSessionExe;
+    private string? _lastActiveGameExe; // latest tick's session exe, feeds wording when focus is elsewhere
     private DateTime _gameSessionStart;
     private readonly HashSet<string> _detectSeen = new(StringComparer.OrdinalIgnoreCase); // ponytail: cleared when process exits, relaunch re-notifies
     private readonly HashSet<string> _unknownSeen = new(StringComparer.OrdinalIgnoreCase); // ponytail: one silent log line per exe per run
@@ -189,13 +190,22 @@ public partial class App : System.Windows.Application
                     if (string.Equals(g.Exe, fg, StringComparison.OrdinalIgnoreCase)) { focused = g.Exe; break; }
                 }
             }
-            if (focused is not null && running.TryGetValue(focused, out var sessionStart))
+            string? active = focused;
+            DateTime activeStart = default;
+            if (active is not null && !running.TryGetValue(active, out activeStart)) active = null;
+            if (active is null && _settings.CountWhenRunning)
             {
-                if (!string.Equals(_gameSessionExe, focused, StringComparison.OrdinalIgnoreCase) || _gameSessionStart != sessionStart)
+                foreach (var (exe, start) in running.OrderBy(kv => kv.Value))
+                { active = exe; activeStart = start; break; } // earliest-running listed game, focus not needed
+            }
+            _lastActiveGameExe = active; // feeds ShowTest wording when focus is elsewhere
+            if (active is not null)
+            {
+                if (!string.Equals(_gameSessionExe, active, StringComparison.OrdinalIgnoreCase) || _gameSessionStart != activeStart)
                 {
-                    _gameSessionExe = focused; // new session: overdue fires on next due tick
-                    _gameSessionStart = sessionStart;
-                    _lastGame = sessionStart;
+                    _gameSessionExe = active; // new session: overdue fires on next due tick
+                    _gameSessionStart = activeStart;
+                    _lastGame = activeStart;
                 }
                 if (GameInWindow(nowLocal) && (nowUtc - _gameSessionStart) >= TimeSpan.FromMinutes(Math.Max(1, _settings.GameMinutes))
                     && (nowUtc - _lastGame) >= TimeSpan.FromMinutes(Math.Max(1, _settings.GameMinutes)))
@@ -491,6 +501,8 @@ public partial class App : System.Windows.Application
             }
             if (!gameActive && _heurState == HeurState.Active && string.Equals(_heurExe, fg, StringComparison.OrdinalIgnoreCase))
                 gameActive = true; // Phase 4 heuristic session counts as game-active
+            if (!gameActive && _settings.CountWhenRunning && !string.IsNullOrWhiteSpace(_lastActiveGameExe))
+                gameActive = true; // running-counts: session on a background game
         }
         var isGame = modeOverride?.Equals("game", StringComparison.OrdinalIgnoreCase) == true
             || (modeOverride?.Equals("general", StringComparison.OrdinalIgnoreCase) != true && gameActive && _settings.GameEnabled);
@@ -525,6 +537,8 @@ public partial class App : System.Windows.Application
             }
             if (isGame && _heurState == HeurState.Active && string.Equals(_heurExe, fg, StringComparison.OrdinalIgnoreCase))
                 return GameDisplayName(fg); // heuristic session: Title-case, never another game's name
+            if (isGame && _settings.CountWhenRunning && !string.IsNullOrWhiteSpace(_lastActiveGameExe))
+                return GameDisplayName(_lastActiveGameExe); // running-counts: name the session game, not the focused app
         }
         if (isGame)
         {
