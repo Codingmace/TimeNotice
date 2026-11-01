@@ -34,6 +34,7 @@ public sealed class Settings
     public string GameDetectSubTemplate { get; set; } = "Monitoring every {interval} min"; // blank = no sub line
     public bool PauseAll { get; set; } = false;
     public List<string> QuietModeExes { get; set; } = new() { "example-game.exe" };
+    public List<string> LauncherExes { get; set; } = new();
 
     public static string Dir => System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TimeNotice");
@@ -71,6 +72,11 @@ public sealed class Settings
         if (string.IsNullOrWhiteSpace(s.CustomBackground)) s.CustomBackground = "#CC1E1E1E";
         if (string.IsNullOrWhiteSpace(s.CustomText)) s.CustomText = "#FFFFFFFF";
         if (string.IsNullOrWhiteSpace(s.CustomSubText)) s.CustomSubText = "#FFBBBBBB";
+        if (s.LauncherExes is null || s.LauncherExes.Count == 0)
+            s.LauncherExes = GameCatalog.DefaultLaunchers(); // seed Phase 3 launcher-ignore on old configs
+        s.LauncherExes = s.LauncherExes
+            .Select(x => (x ?? "").Trim()).Where(x => x.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         return s;
     }
 

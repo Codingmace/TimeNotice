@@ -85,6 +85,9 @@
                         <TextBlock Text="Games (one exe per line — spotify.exe = Spotify)" Style="{StaticResource FieldLabel}"/>
                         <TextBox x:Name="GameBox" Height="70"
                                  AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
+                        <TextBlock Text="Launchers — never count as gameplay (one exe per line)" Style="{StaticResource FieldLabel}"/>
+                        <TextBox x:Name="LauncherBox" Height="52"
+                                 AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
                         <CheckBox x:Name="GameWindowOnlyBox" Content="Only between times"/>
                         <StackPanel x:Name="GameTimePanel" Orientation="Horizontal">
                             <StackPanel>

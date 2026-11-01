@@ -3,8 +3,8 @@
 Update this file every session. One row per test run.
 
 ## Current
-- Phase: 3 — Detection NEXT (launcher ignore list + unknown-exe handling; StartTime sessions already built 2026-11-01)
-- Next action: await user go-ahead for P3 launcher-ignore + unknown-exe tray hint
+- Phase: 3 — DONE, pending user gate (launcher-ignore + catalog + unknown-exe verified via logs 2026-11-01; Settings visuals need user open/save)
+- Next action: user gate — open Settings → Game tab shows Launchers box; known-game start/stop + launcher-not-mistaken confirm
 
 ## How to sync Mac <-> Windows
 ```bash
@@ -49,6 +49,7 @@ dotnet run --project src/TimeNotice/TimeNotice.csproj
 | 2026-11-01 | Windows | Log diagnosis: 1-min refires were game pops (opencode.exe listed as game) in reused general wording; set distinct game wording, restarted live | Running, auto-game fired with new wording |
 | 2026-11-01 | Windows | Detection two-line format: GameDetectSubTemplate (blank=none), short main + small sub like other pops, live config split | Built 0 warn, restarted live, detects firing |
 | 2026-11-01 | Windows | DST-proof scheduler: interval/session math in UTC, time windows + display stay local; observed live clock correction 01:49→01:35 mid-session, self-healed | Built 0 warn, restarted live, firing |
+| 2026-11-01 | Windows | P3 Detection: GameCatalog (9 entries ≤12 max: 5 launcher Ignore + cs2/csgo multi-exe + eldenring + Balatro), LauncherExes setting seeded from catalog + Game-tab box, self-ignore TimeNotice.exe, unknown-exe silent log + tray tooltip, tray classify (Games/Quiet/Launchers) | Built 0 warn; live log-verified: unknown-exe Notepad line + no popup; launcher-wins both directions (opencode in Launchers = 12s silence, removed = detect+auto-game resume); Settings visuals pending user open/save |
 
 ## Ponytail debt (audit 2026-10-21, biggest first)
 - [ ] `Settings.cs`: delete `ReminderMinutes + Position` until a Phase 2 reader exists

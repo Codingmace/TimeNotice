@@ -29,6 +29,9 @@ public partial class App : System.Windows.Application
         _tray.ContextMenuStrip = new WinForms.ContextMenuStrip();
         _tray.ContextMenuStrip.Items.Add("Test general reminder", null, (_, _) => ShowTest("manual-general", "general"));
         _tray.ContextMenuStrip.Items.Add("Test game reminder", null, (_, _) => ShowTest("manual-game", "game"));
+        _tray.ContextMenuStrip.Items.Add("Add focused app to Games", null, (_, _) => ClassifyFocused("games"));
+        _tray.ContextMenuStrip.Items.Add("Add focused app to Quiet", null, (_, _) => ClassifyFocused("quiet"));
+        _tray.ContextMenuStrip.Items.Add("Add focused app to Launchers", null, (_, _) => ClassifyFocused("launchers"));
         var pauseItem = new WinForms.ToolStripMenuItem("Pause") { Checked = _settings.PauseAll, CheckOnClick = true };
         pauseItem.CheckedChanged += (_, _) =>
         {
@@ -72,6 +75,77 @@ public partial class App : System.Windows.Application
     private string? _gameSessionExe;
     private DateTime _gameSessionStart;
     private readonly HashSet<string> _detectSeen = new(StringComparer.OrdinalIgnoreCase); // ponytail: cleared when process exits, relaunch re-notifies
+    private readonly HashSet<string> _unknownSeen = new(StringComparer.OrdinalIgnoreCase); // ponytail: one silent log line per exe per run
+
+    // Phase 3: self + launcher-ignore never count as gameplay. Launcher wins
+    // over a Games entry for the same exe (SCOPE §5: launchers = Ignore).
+    private bool IsIgnored(string? exe)
+    {
+        if (string.IsNullOrWhiteSpace(exe)) return false;
+        if (exe.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase)) return true; // never score self
+        foreach (var line in _settings.LauncherExes)
+            if (string.Equals(ParseGameEntry(line).Exe, exe, StringComparison.OrdinalIgnoreCase)) return true;
+        return GameCatalog.IsIgnore(exe);
+    }
+
+    // Effective game list: user mapping first, then catalog Normal entries not
+    // overridden into Launchers. Unknown exes are NOT added — silent log only.
+    private List<(string Exe, string? Name)> EffectiveGames()
+    {
+        var list = _settings.GameExes
+            .Select(ParseGameEntry)
+            .Where(g => g.Exe.Length > 0)
+            .ToList();
+        var have = new HashSet<string>(list.Select(g => g.Exe), StringComparer.OrdinalIgnoreCase);
+        foreach (var c in GameCatalog.Entries)
+        {
+            if (!c.Policy.Equals("Normal", StringComparison.OrdinalIgnoreCase)) continue;
+            if (have.Contains(c.Exe) || IsIgnored(c.Exe)) continue;
+            list.Add((c.Exe, c.Display));
+            have.Add(c.Exe);
+        }
+        return list;
+    }
+
+    private void NoteUnknown(string? fg)
+    {
+        if (string.IsNullOrWhiteSpace(fg)) return;
+        if (IsIgnored(fg)) return;
+        if (_settings.QuietModeExes.Any(q => string.Equals(q, fg, StringComparison.OrdinalIgnoreCase))) return;
+        foreach (var line in _settings.GameExes)
+            if (string.Equals(ParseGameEntry(line).Exe, fg, StringComparison.OrdinalIgnoreCase)) return;
+        if (GameCatalog.Find(fg) is not null) return;
+        if (!_unknownSeen.Add(fg)) return; // silent after first sighting per run
+        try { System.IO.File.AppendAllText(System.IO.Path.Combine(Settings.Dir, "debug.log"), $"{DateTime.Now:HH:mm:ss} src=unknown-exe fg={fg} hint=tray{System.Environment.NewLine}"); } catch { }
+        if (_tray is not null)
+        {
+            var tip = $"TimeNotice - unknown: {fg} (right-click > Settings to classify)";
+            _tray.Text = tip.Length <= 63 ? tip : tip[..63]; // WinForms cap is 64 chars
+        }
+    }
+
+    private void ClassifyFocused(string target)
+    {
+        var fg = NotificationPolicy.ForegroundExe();
+        if (string.IsNullOrWhiteSpace(fg)) return;
+        if (target == "games")
+        {
+            if (!_settings.GameExes.Any(l => string.Equals(ParseGameEntry(l).Exe, fg, StringComparison.OrdinalIgnoreCase)))
+                _settings.GameExes.Add(fg);
+        }
+        else if (target == "quiet")
+        {
+            if (!_settings.QuietModeExes.Any(q => string.Equals(q, fg, StringComparison.OrdinalIgnoreCase)))
+                _settings.QuietModeExes.Add(fg);
+        }
+        else
+        {
+            if (!_settings.LauncherExes.Any(l => string.Equals(ParseGameEntry(l).Exe, fg, StringComparison.OrdinalIgnoreCase)))
+                _settings.LauncherExes.Add(fg);
+        }
+        _settings.Save();
+        try { System.IO.File.AppendAllText(System.IO.Path.Combine(Settings.Dir, "debug.log"), $"{DateTime.Now:HH:mm:ss} src=classify fg={fg} target={target}{System.Environment.NewLine}"); } catch { }
+    }
 
     private void CheckAuto()
     {
@@ -80,10 +154,10 @@ public partial class App : System.Windows.Application
         var fg = NotificationPolicy.ForegroundExe();
         if (_settings.PauseAll) return;
         if (NotificationPolicy.ShouldSuppress(fg, _settings)) return; // Quiet wins over both modes, retry next tick
-        var games = _settings.GameExes
-            .Select(ParseGameEntry)
-            .Where(g => g.Exe.Length > 0)
-            .ToList();
+        NoteUnknown(fg); // Phase 3: silent log + tray hint, never a popup
+        if (IsIgnored(fg)) fg = null; // launchers + self never hold focus for sessions
+        var games = EffectiveGames();
+        games.RemoveAll(g => IsIgnored(g.Exe)); // launcher-ignore wins over a Games entry for the same exe
         // detection: any listed game process running (focused or not)
         if (_settings.GameEnabled && games.Count > 0)
         {
@@ -146,6 +220,8 @@ public partial class App : System.Windows.Application
             if (string.Equals(e, exe, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(name))
                 return name!;
         }
+        var hit = GameCatalog.Find(exe); // catalog display when user gave a bare exe
+        if (hit is not null) return hit.Display;
         var bare = exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? exe[..^4] : exe;
         return bare.Length > 0 ? char.ToUpperInvariant(bare[0]) + bare[1..] : exe; // ponytail: auto Title-case, override with "exe = Name"
     }
@@ -275,11 +351,11 @@ public partial class App : System.Windows.Application
         var fg = NotificationPolicy.ForegroundExe();
         var suppress = NotificationPolicy.ShouldSuppress(fg, _settings);
         var gameActive = false;
-        if (!string.IsNullOrWhiteSpace(fg))
+        if (!string.IsNullOrWhiteSpace(fg) && !IsIgnored(fg))
         {
-            foreach (var line in _settings.GameExes)
+            foreach (var g in EffectiveGames())
             {
-                if (string.Equals(ParseGameEntry(line).Exe, fg, StringComparison.OrdinalIgnoreCase)) { gameActive = true; break; }
+                if (string.Equals(g.Exe, fg, StringComparison.OrdinalIgnoreCase)) { gameActive = true; break; }
             }
         }
         var isGame = modeOverride?.Equals("game", StringComparison.OrdinalIgnoreCase) == true
