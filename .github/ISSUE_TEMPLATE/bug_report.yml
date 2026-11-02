@@ -1,0 +1,47 @@
+name: Bug report
+description: Report something broken in TimeNotice
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Release tag or commit (e.g. beta-1.2, main @ abc1234)
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: e.g. Windows 11 23H2, Windows 10 22H2
+    validations:
+      required: true
+  - type: textarea
+    id: doing
+    attributes:
+      label: What were you doing?
+      description: Game/app name, fullscreen or borderless, paused or not
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs saw
+      description: What you expected, and what actually happened
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: settings.json + debug.log
+      description: From %AppData%\TimeNotice — attach both files (plus debug.log.old if it exists)
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: First checks
+      options:
+        - label: Pause is unchecked
+        - label: Focused app is not in the Quiet list
+        - label: Game exe is listed under Settings → Game (for game reminders)

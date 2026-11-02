@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest an idea for TimeNotice
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What time-blindness moment does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should the app do?
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check (see SCOPE.md §9 — these are deferred and will be declined)
+      options:
+        - label: Not injection / hooks / drivers / memory reading
+        - label: Not cloud / sync / accounts / telemetry
+        - label: Not lockouts / forced limits
