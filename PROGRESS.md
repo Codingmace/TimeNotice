@@ -85,6 +85,7 @@ with no database, an invisible untracked clock is unobservable, so it added noth
 | 2026-11-01 | Windows | Confirm cleanup: stacked Accept/Reject lines, removed Dismiss keybind entirely (tray test now Z/X) | Built 0 warn, relaunched |
 | 2026-11-01 | Windows | P6 hardening: Logger (ensure-dir + 512KB rotate), single-instance mutex, crash handlers, corrupt-backup + atomic save, asInvoker manifest, Start-with-Windows checkbox + HKCU Run | Build 0 warn 0 err; Release publish OK to publish/; pending user gates: clean-install + Defender scan |
 | 2026-11-01 | Windows | P6 gates: wiped %AppData%/TimeNotice → fresh launch OK (PID 8900, dir + debug.log recreated, silent unknown-exe); garbage settings.json → corrupt backup + defaults, app alive (PID 12552); Defender clean per user; restored pre-P6 files, relaunched | P6 DONE |
+| 2026-11-02 | Windows | Heuristic dip-grace (SuspectSeconds hold, cand-drop log) + sampler refresh-on-new-pid + null-on-no-match; Save stays open (merge baseline re-snapshot); Settings Topmost-pulse to front; build 0 warn 0 err | Pending user pull + Dota retest on gaming PC |
 
 ## Ponytail debt (audit 2026-10-21, biggest first)
 - [ ] `Settings.cs`: delete `ReminderMinutes + Position` until a Phase 2 reader exists

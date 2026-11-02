@@ -415,7 +415,12 @@ public partial class SettingsWindow : Window
         _settings.Save();
         _onSaved();
         _dirty = false;
-        Close();
+        // Stay open: the window is a workspace, not a dialog. Re-snapshot the
+        // merge baseline so a second save treats the first save's lines as home.
+        _openedGames.Clear();
+        foreach (var k in _settings.GameExes.Select(Settings.ExeKey)) _openedGames.Add(k);
+        _openedIgnore.Clear();
+        foreach (var k in _settings.IgnoreExes.Select(Settings.ExeKey)) _openedIgnore.Add(k);
     }
 
     // Box lines win, except entries added elsewhere while the window was open

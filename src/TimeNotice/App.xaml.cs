@@ -115,15 +115,19 @@ public partial class App : System.Windows.Application
 
     private void OpenSettings()
     {
-        if (_settingsWindow is not null)
+        if (_settingsWindow is null)
         {
-            if (_settingsWindow.IsVisible) _settingsWindow.Activate();
-            else _settingsWindow.Show();
-            return;
+            _settingsWindow = new SettingsWindow(_settings, () => { ApplyStartup(); StartScheduler(); }, GameDisplayName);
+            _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
-        _settingsWindow = new SettingsWindow(_settings, () => { ApplyStartup(); StartScheduler(); }, GameDisplayName);
-        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
-        _settingsWindow.Show();
+        if (_settingsWindow.WindowState == WindowState.Minimized) _settingsWindow.WindowState = WindowState.Normal;
+        if (!_settingsWindow.IsVisible) _settingsWindow.Show();
+        // Tray/taskbar reopen must land in front: Activate alone only flashes
+        // behind a borderless game, so force the Z-order with a Topmost pulse.
+        _settingsWindow.Activate();
+        _settingsWindow.Topmost = true;
+        _settingsWindow.Topmost = false;
+        _settingsWindow.Focus();
     }
 
     // Status header + tooltip + icon, refreshed on every menu open so Quiet/Pause
@@ -175,6 +179,7 @@ public partial class App : System.Windows.Application
     private DateTime _heurSuspectSinceUtc;
     private DateTime _heurCandSinceUtc;
     private string? _heurCandExe;
+    private DateTime _heurCandLastGoodUtc; // last tick the candidate showed a real signal; dips inside grace hold the clock
     private Heuristics.GpuSampler? _gpu;
     private bool _heurInitLogged;
 
@@ -329,6 +334,7 @@ public partial class App : System.Windows.Application
         _heurState = HeurState.Idle;
         _heurExe = null;
         _heurCandExe = null;
+        _heurCandLastGoodUtc = default;
         if (_gameSessionExe is not null && !IsKnownGame(_gameSessionExe))
             _gameSessionExe = null; // drop heuristic bridge, keep known-game sessions
     }
@@ -360,6 +366,7 @@ public partial class App : System.Windows.Application
             case HeurState.Idle:
                 if (signal && SameExe(_heurCandExe, fg))
                 {
+                    _heurCandLastGoodUtc = nowUtc;
                     if ((nowUtc - _heurCandSinceUtc).TotalSeconds >= _settings.HeuristicStartSeconds)
                     {
                         _heurState = HeurState.Active; // session found: sustained unknown activity
@@ -380,10 +387,21 @@ public partial class App : System.Windows.Application
                 {
                     if (!SameExe(_heurCandExe, fg))
                         Logger.Log($"src=heur-cand exe={fg} gpu={(gpu is null ? "n/a" : $"{gpu:F0}%")} idle={idleSec}s fs={fs}");
-                    _heurCandExe = fg; // first sustained tick; dips restart the clock (conservative)
+                    _heurCandExe = fg; // first sustained tick; brief dips hold the clock (grace below)
                     _heurCandSinceUtc = nowUtc;
+                    _heurCandLastGoodUtc = nowUtc;
                 }
-                else _heurCandExe = null;
+                else if (SameExe(_heurCandExe, fg) && fg is not null
+                    && (nowUtc - _heurCandLastGoodUtc).TotalSeconds <= Math.Max(5, _settings.HeuristicSuspectSeconds))
+                {
+                    // same exe, brief dip (loading screen, overlay, one slow tick): hold the clock
+                }
+                else
+                {
+                    if (_heurCandExe is not null && SameExe(_heurCandExe, fg))
+                        Logger.Log($"src=heur-cand-drop exe={fg} gpu={(gpu is null ? "n/a" : $"{gpu:F0}%")} idle={idleSec}s fs={fs}");
+                    _heurCandExe = null;
+                }
                 break;
             case HeurState.Active:
                 if (signal && SameExe(_heurExe, fg))

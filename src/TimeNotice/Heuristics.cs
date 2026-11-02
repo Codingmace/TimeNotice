@@ -107,22 +107,28 @@ public static class Heuristics
             finally { Probed = true; }
         }
 
-        // Returns summed % for pid, or null when unknown (priming / error).
+        // Returns summed % for pid, or null when unknown (priming, no
+        // per-process instances yet, or error). No match reads as unknown,
+        // never as 0%: a fresh launch has no instances until the next refresh.
         public double? SampleSum(uint pid)
         {
             if (!Available || pid == 0) return null;
             try
             {
                 var tag = $"pid_{pid}_";
-                if ((DateTime.UtcNow - _lastRefresh).TotalSeconds > 15 || _counters.Count == 0)
-                    Refresh(tag);
+                var haveAny = _counters.Keys.Any(k => k.Contains(tag, StringComparison.OrdinalIgnoreCase));
+                if ((DateTime.UtcNow - _lastRefresh).TotalSeconds > 15 || !haveAny)
+                    Refresh(tag); // relaunch/new pid: instances appear after the last refresh
                 if (!_primed) { _primed = true; return null; } // first NextValue is always 0
                 double sum = 0;
+                var matched = 0;
                 foreach (var (name, c) in _counters)
                 {
                     if (!name.Contains(tag, StringComparison.OrdinalIgnoreCase)) continue;
+                    matched++;
                     try { sum += c.NextValue(); } catch { }
                 }
+                if (matched == 0) return null;
                 return sum;
             }
             catch { return null; }
