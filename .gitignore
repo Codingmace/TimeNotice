@@ -4,3 +4,4 @@ publish/
 .gstack/
 .vs/
 *.user
+collect-gpu-debug-output.txt

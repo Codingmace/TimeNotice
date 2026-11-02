@@ -60,8 +60,8 @@ for ($i = 1; $i -le $ticks; $i++) {
   $fg = "?"; $fs = "?"; $mine = 0.0; $total = 0.0
   try {
     $h = [FG]::GetForegroundWindow()
-    $pid = 0; [void][FG]::GetWindowThreadProcessId($h, [ref]$pid)
-    $p = Get-Process -Id $pid; $fg = "$($p.ProcessName).exe"
+    $fgPid = 0; [void][FG]::GetWindowThreadProcessId($h, [ref]$fgPid)
+    $p = Get-Process -Id $fgPid; $fg = "$($p.ProcessName).exe"
     $r = New-Object FG+RECT; [void][FG]::GetWindowRect($h, [ref]$r)
     $tol = 2
     $fs = [math]::Abs($r.Left - $b.Left) -le $tol -and [math]::Abs($r.Top - $b.Top) -le $tol -and `
