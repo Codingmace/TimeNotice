@@ -6,7 +6,7 @@ Update this file every session. One row per test run.
 - Phase: 6 — DONE 2026-11-01 (hardening verified: clean install + corrupt recovery live-tested, Defender scan clean per user)
 - Next action: V1 exit checklist sweep (§11) or public release prep
 - Open (deferred to post-Phase 6): CountWhenRunning ON-path self-test (tick box, alt-tab 2 min); Game-tab crowding polish; repo public release; game+general overlap — both fire by design (late-night time awareness), reconsider game-with-time-only after user testing/feedback; beta debug options in-app (tray Open-logs-folder + Copy-debug-info, startup ver/OS/settings line in debug.log) — docs-only for now, see README Beta debugging
-- Repo: private for now, will go public later
+- Repo: public since 2026-11-02
 - Config: reset to fresh-install defaults 2026-11-01 at user request
 
 ## How to sync Mac <-> Windows
