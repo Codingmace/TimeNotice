@@ -1,6 +1,6 @@
 # TimeNotice
 
-Gentle time-awareness reminders for Windows. A small tray app that shows the current time over games and focused work without stealing focus or interrupting input.
+Gentle time-awareness reminders for Windows, built for ADHD time blindness. A small tray app that shows the current time over games and focused work without stealing focus or interrupting input.
 
 **Lightweight · local-only · no accounts, no cloud, no telemetry · no admin rights · no game injection, hooks, or drivers.**
 
