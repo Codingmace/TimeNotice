@@ -2,6 +2,10 @@
 
 Gentle time-awareness reminders for Windows. A small tray app that shows the current time over games and focused work without stealing focus or interrupting input.
 
+**Lightweight · local-only · no accounts, no cloud, no telemetry · no admin rights · no game injection, hooks, or drivers.**
+
+Latest beta (no install, just download and run): https://github.com/Skeeee343/TimeNotice/releases
+
 External overlay only. No game injection, hooks, drivers, memory reading, or cloud. See `SCOPE.md` for the locked V1 scope.
 
 ## Status
@@ -35,7 +39,7 @@ Each report needs these 3 things:
 
 Common first checks before reporting: Pause unchecked? Focused app not in Quiet list? Game exe listed under Settings → Game? General reminders fire on a schedule even with no game focused; game reminders need the game focused (unless CountWhenRunning is on).
 
-Release binary: `dotnet publish src/TimeNotice/TimeNotice.csproj -c Release` (output to `publish/`). SmartScreen warning is expected until signing/reputation — see `SCOPE.md` §2.
+Release binary (self-contained single exe, what the betas ship): `dotnet publish src/TimeNotice/TimeNotice.csproj -c Release --self-contained -r win-x64 /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true -o publish/beta-X.Y` (output is git-ignored; attach to a GitHub prerelease). SmartScreen warning is expected until signing/reputation — see `SCOPE.md` §2.
 
 ## Docs
 - `SCOPE.md` — what V1 is and is not
