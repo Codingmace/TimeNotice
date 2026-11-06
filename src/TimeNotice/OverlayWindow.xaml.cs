@@ -162,9 +162,11 @@ public partial class OverlayWindow : Window
                 if (GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), ref mi))
                 {
                     // Monitor APIs report physical pixels; WPF positions in device-independent units,
-                    // so divide by the scale (150% text = 144 dpi, so 1920px = 1280 units).
+                    // so divide by OUR scale (150% text = 144 dpi, so 1920px = 1280 units).
+                    // Never the focused game's DPI: a DPI-unaware game (javaw.exe = 96)
+                    // would give scale 1 and push the corner off-screen.
                     double scale = 1.0;
-                    try { scale = GetDpiForWindow(hwnd) / 96.0; } catch { }
+                    try { scale = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX; } catch { }
                     if (scale <= 0) scale = 1.0;
                     var tl = new System.Windows.Point(mi.rcWork.Left / scale, mi.rcWork.Top / scale);
                     var br = new System.Windows.Point(mi.rcWork.Right / scale, mi.rcWork.Bottom / scale);
@@ -214,8 +216,6 @@ public partial class OverlayWindow : Window
     private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForWindow(IntPtr hwnd); // Win10 1607+, project floor is 1809
 
     private const uint MONITOR_DEFAULTTONEAREST = 2;
 
