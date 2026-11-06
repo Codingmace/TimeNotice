@@ -105,15 +105,33 @@ public partial class OverlayWindow : Window
             bg = _settings.CustomBackground; fg = _settings.CustomText; sub = _settings.CustomSubText;
         }
         PopupBorder.Background = new System.Windows.Media.SolidColorBrush(ParseColor(bg, "#CC1E1E1E"));
+        // Light fill is pure white, so a hairline keeps the box edge visible over white windows.
+        if (mode.Equals("Light", StringComparison.OrdinalIgnoreCase))
+        {
+            PopupBorder.BorderBrush = new System.Windows.Media.SolidColorBrush(ParseColor("#FFD5D5DC", "#FFD5D5DC"));
+            PopupBorder.BorderThickness = new Thickness(1);
+        }
+        else PopupBorder.BorderThickness = new Thickness(0);
         TimeText.Foreground = new System.Windows.Media.SolidColorBrush(ParseColor(fg, "#FFFFFFFF"));
         SubText.Foreground = new System.Windows.Media.SolidColorBrush(ParseColor(sub, "#FFBBBBBB"));
         ExeText.Foreground = SubText.Foreground;
         // Box and text fade on their own: window stays opaque so the fade-out
         // animation still has full range. Box off = transparent background.
         Opacity = 1.0;
+        var boxOp = Math.Clamp(_settings.Opacity, 0.2, 1.0);
         if (!_settings.ShowBox)
+        {
             PopupBorder.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Transparent);
-        PopupBorder.Opacity = _settings.ShowBox ? Math.Clamp(_settings.Opacity, 0.2, 1.0) : 1.0;
+            PopupBorder.Opacity = 1.0;
+        }
+        else if (boxOp >= 1.0)
+        {
+            // 100% means fully blocked out: drop any translucency baked into the fill.
+            var solid = ParseColor(bg, "#CC1E1E1E"); solid.A = 255;
+            PopupBorder.Background = new System.Windows.Media.SolidColorBrush(solid);
+            PopupBorder.Opacity = 1.0;
+        }
+        else PopupBorder.Opacity = boxOp;
         var top = Math.Clamp(_settings.TextOpacity, 0.2, 1.0);
         TimeText.Opacity = top;
         SubText.Opacity = top;
@@ -134,7 +152,7 @@ public partial class OverlayWindow : Window
         return System.Windows.Media.Colors.Black;
     }
 
-    private static bool IsHostLight()
+    internal static bool IsHostLight()
     {
         try
         {

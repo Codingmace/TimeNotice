@@ -400,21 +400,39 @@ public partial class SettingsWindow : Window
         }
         var mode = SelectedTag(ThemeBox);
         if (string.IsNullOrWhiteSpace(mode)) mode = (_settings.ThemeMode ?? "Dark").Trim();
-        if (mode.Equals("MatchHost", StringComparison.OrdinalIgnoreCase)) mode = "Dark"; // preview as Dark, resolved at show time
+        if (mode.Equals("MatchHost", StringComparison.OrdinalIgnoreCase)) mode = OverlayWindow.IsHostLight() ? "Light" : "Dark"; // preview resolves like the real popup
         string tbg = "#CC1E1E1E", tfg = "#FFFFFFFF", tsg = "#FFBBBBBB";
         if (mode.Equals("Light", StringComparison.OrdinalIgnoreCase)) { tbg = "#FFFFFFFF"; tfg = "#FF111116"; tsg = "#FF5B5B66"; }
         else if (mode.Equals("Custom", StringComparison.OrdinalIgnoreCase)) { tbg = BgBox.Text; tfg = TextColorBox.Text; tsg = SubColorBox.Text; }
         border.Background = new System.Windows.Media.SolidColorBrush(OverlayWindow.ParseColor(tbg, "#CC1E1E1E"));
+        // White preview fill on the near-white Settings page: hairline shows the box edge.
+        if (mode.Equals("Light", StringComparison.OrdinalIgnoreCase))
+        {
+            border.BorderBrush = new System.Windows.Media.SolidColorBrush(OverlayWindow.ParseColor("#FFD5D5DC", "#FFD5D5DC"));
+            border.BorderThickness = new Thickness(1);
+        }
+        else border.BorderThickness = new Thickness(0);
         main.Foreground = new System.Windows.Media.SolidColorBrush(OverlayWindow.ParseColor(tfg, "#FFFFFFFF"));
         sub.Foreground = new System.Windows.Media.SolidColorBrush(OverlayWindow.ParseColor(tsg, "#FFBBBBBB"));
         if (exeBlock is not null) exeBlock.Foreground = sub.Foreground;
         // Preview reads the live sliders so box/text fade separately, like the real popup.
         var boxOp = OpacitySlider.Value / 100.0;
         if (boxOp <= 0) boxOp = _settings.Opacity;
+        boxOp = Math.Clamp(boxOp, 0.2, 1.0);
         var boxOff = ShowBoxBox.IsChecked == false;
         if (boxOff)
+        {
             border.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Transparent);
-        border.Opacity = boxOff ? 1.0 : Math.Clamp(boxOp, 0.2, 1.0);
+            border.Opacity = 1.0;
+        }
+        else if (boxOp >= 1.0)
+        {
+            // 100% means fully blocked out, like the real popup.
+            var solid = OverlayWindow.ParseColor(tbg, "#CC1E1E1E"); solid.A = 255;
+            border.Background = new System.Windows.Media.SolidColorBrush(solid);
+            border.Opacity = 1.0;
+        }
+        else border.Opacity = boxOp;
         var textOp = TextOpacitySlider.Value / 100.0;
         if (textOp <= 0) textOp = _settings.TextOpacity;
         textOp = Math.Clamp(textOp, 0.2, 1.0);
