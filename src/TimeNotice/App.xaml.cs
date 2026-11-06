@@ -32,6 +32,12 @@ public partial class App : System.Windows.Application
             try { Logger.Log($"src=crash bg ex={args.ExceptionObject?.GetType().Name}"); } catch { }
         };
         _settings = Settings.Load();
+        try
+        {
+            var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?";
+            Logger.Log($"src=startup ver=v{ver} os={Environment.OSVersion.VersionString} dir={Settings.Dir}");
+        }
+        catch { }
         ApplyStartup();
         _overlay = new OverlayWindow(_settings);
         _overlay.Hidden += OnOverlayHidden;
@@ -65,6 +71,9 @@ public partial class App : System.Windows.Application
         _tray.ContextMenuStrip.Items.Add("Test general reminder", null, (_, _) => ShowTest("manual-general", "general"));
         _tray.ContextMenuStrip.Items.Add("Test game reminder", null, (_, _) => ShowTest("manual-game", "game"));
         _tray.ContextMenuStrip.Items.Add("Test confirm (Z/X)", null, (_, _) => TestConfirm());
+        _tray.ContextMenuStrip.Items.Add(new WinForms.ToolStripSeparator());
+        _tray.ContextMenuStrip.Items.Add("Open logs folder", null, (_, _) => OpenLogsFolder());
+        _tray.ContextMenuStrip.Items.Add("Clear log", null, (_, _) => Logger.Clear());
         _tray.ContextMenuStrip.Items.Add(new WinForms.ToolStripSeparator());
         _tray.ContextMenuStrip.Items.Add("Exit", null, (_, _) => Shutdown());
         _tray.ContextMenuStrip.Opening += (_, _) => RefreshTrayMenu(statusItem, pauseItem);
@@ -113,11 +122,21 @@ public partial class App : System.Windows.Application
         catch { }
     }
 
+    private void OpenLogsFolder()
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(Settings.Dir);
+            System.Diagnostics.Process.Start("explorer.exe", Settings.Dir);
+        }
+        catch { }
+    }
+
     private void OpenSettings()
     {
         if (_settingsWindow is null)
         {
-            _settingsWindow = new SettingsWindow(_settings, () => { ApplyStartup(); StartScheduler(); }, GameDisplayName);
+            _settingsWindow = new SettingsWindow(_settings, () => { ApplyStartup(); StartScheduler(); }, GameDisplayName, DetectionStatus);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
         if (_settingsWindow.WindowState == WindowState.Minimized) _settingsWindow.WindowState = WindowState.Normal;
@@ -171,6 +190,7 @@ public partial class App : System.Windows.Application
     private DateTime _gameSessionStart;
     private readonly HashSet<string> _detectSeen = new(StringComparer.OrdinalIgnoreCase); // ponytail: cleared when process exits, relaunch re-notifies
     private readonly HashSet<string> _unknownSeen = new(StringComparer.OrdinalIgnoreCase); // ponytail: one silent log line per exe per run
+    private string? _lastNonSelfFg; // last fg that wasn't self/null: tray click steals focus, so classify uses this
 
     // Phase 4 heuristic session (SCOPE §3-§4): IDLE -> ACTIVE -> SUSPECT -> INACTIVE.
     private HeurState _heurState = HeurState.Idle;
@@ -232,8 +252,13 @@ public partial class App : System.Windows.Application
 
     private void ClassifyFocused(string target)
     {
-        var fg = NotificationPolicy.ForegroundExe();
+        var live = NotificationPolicy.ForegroundExe();
+        // Tray menu steals focus, so live is often TimeNotice.exe itself.
+        // Fall back to the last non-self fg seen by the 5s poll.
+        var fg = (string.IsNullOrWhiteSpace(live) || live.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase))
+            && !string.IsNullOrWhiteSpace(_lastNonSelfFg) ? _lastNonSelfFg : live;
         if (string.IsNullOrWhiteSpace(fg)) return;
+        if (fg.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase)) return; // never list self
         if (target == "games")
         {
             if (!_settings.GameExes.Any(l => SameExe(ParseGameEntry(l).Exe, fg)))
@@ -250,7 +275,7 @@ public partial class App : System.Windows.Application
                 _settings.IgnoreExes.Add(fg);
         }
         _settings.Save();
-        Logger.Log($"src=classify fg={fg} target={target}");
+        Logger.Log($"src=classify fg={fg} live={live ?? "<null>"} target={target}");
     }
 
     private void CheckAuto()
@@ -258,6 +283,8 @@ public partial class App : System.Windows.Application
         var nowUtc = DateTime.UtcNow; // ponytail: interval math in UTC, DST-proof
         var nowLocal = DateTime.Now; // ponytail: time windows are local wall-clock by user intent
         var fg = NotificationPolicy.ForegroundExe();
+        if (!string.IsNullOrWhiteSpace(fg) && !fg.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase))
+            _lastNonSelfFg = fg; // remember before menu clicks steal focus
         if (_settings.PauseAll) return;
         if (NotificationPolicy.ShouldSuppress(fg, _settings)) return; // Quiet wins over both modes, retry next tick
         NoteUnknown(fg); // Phase 3: silent log + tray hint, never a popup
@@ -479,6 +506,98 @@ public partial class App : System.Windows.Application
         return bare.Length > 0 ? char.ToUpperInvariant(bare[0]) + bare[1..] : exe; // ponytail: auto Title-case, override with "exe = Name"
     }
 
+    // Detect-tab live readout (issue #9): plain-words snapshot of what the
+    // detector sees right now. Read-only: sampling GPU here just consumes a
+    // sample, it never starts sessions or writes settings.
+    public string DetectionStatus()
+    {
+        try
+        {
+            // Last focus, not live focus (issue #9): on a single monitor opening
+            // Settings always steals focus, so the live read would just say
+            // TimeNotice.exe. The cached last non-self fg is the useful line.
+            var lastFg = _lastNonSelfFg;
+            _gpu ??= new Heuristics.GpuSampler();
+            string lastGpu;
+            try
+            {
+                double? sample = null;
+                if (!string.IsNullOrWhiteSpace(lastFg))
+                {
+                    var procName = lastFg.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? lastFg[..^4] : lastFg;
+                    using var proc = System.Diagnostics.Process.GetProcessesByName(procName).FirstOrDefault();
+                    if (proc is not null) sample = _gpu.SampleSum((uint)proc.Id);
+                }
+                lastGpu = sample is null ? "n/a" : $"{sample:F0}%";
+            }
+            catch { lastGpu = "n/a"; }
+            var lastLine = string.IsNullOrWhiteSpace(lastFg) ? "none yet" : $"{lastFg} (GPU {lastGpu})";
+            string session = "none";
+            if (!string.IsNullOrWhiteSpace(_gameSessionExe))
+                session = $"{GameDisplayName(_gameSessionExe)} — {FormatElapsed(DateTime.UtcNow - _gameSessionStart)}";
+            string watch = _heurState switch
+            {
+                HeurState.Active => $"tracking {_heurExe}",
+                HeurState.Suspect => $"grace after losing {_heurExe}",
+                HeurState.Inactive => "closing",
+                _ => _heurCandExe is null ? "idle"
+                    : $"watching {_heurCandExe} ({(int)(DateTime.UtcNow - _heurCandSinceUtc).TotalSeconds}s of {_settings.HeuristicStartSeconds}s)",
+            };
+            var idle = Heuristics.IdleSeconds();
+            // Fullscreen is only measurable on the live foreground window, so
+            // it only means anything when the game still holds focus.
+            var liveFg = NotificationPolicy.ForegroundExe();
+            var fs = SameExe(liveFg, lastFg) && !string.IsNullOrWhiteSpace(lastFg)
+                ? (Heuristics.IsForegroundFullscreen() ? "yes" : "no")
+                : "n/a (not focused)";
+            var status = $"Last focus: {lastLine}\nSession: {session}\nWatch: {watch}\nIdle {idle}s | Fullscreen {fs}";
+            var top = TopGpuSnapshot();
+            if (top.Count > 0)
+                status += $"\n\nTop {TopGpuCount} GPU processes (why each does/doesn't track):\n" + string.Join("\n", top.Select(t => $"• {t.Exe} — {t.Gpu:F0}% — {GpuVerdict(t.Exe, t.Gpu)}"));
+            else if (_gpu is null || !_gpu.Available)
+                status += "\n\nTop GPU: engine counters unavailable on this machine.";
+            return status;
+        }
+        catch { return "Status unavailable."; }
+    }
+
+    private List<(uint Pid, string Exe, double Gpu)> _topSnap = new();
+    private DateTime _topSnapUtc;
+    private const int TopGpuCount = 5; // readout cap, named in the header so the limit is visible
+
+    // Throttled full-GPU ranking for the readout (issue #9): enumeration +
+    // NextValue over every engine instance is fine every few seconds, not
+    // every Settings-timer tick.
+    private List<(uint Pid, string Exe, double Gpu)> TopGpuSnapshot()
+    {
+        if ((DateTime.UtcNow - _topSnapUtc).TotalSeconds < 5 && _topSnap.Count > 0) return _topSnap;
+        try
+        {
+            _gpu ??= new Heuristics.GpuSampler();
+            _topSnap = _gpu.SnapshotTop(TopGpuCount);
+            _topSnapUtc = DateTime.UtcNow;
+        }
+        catch { }
+        return _topSnap;
+    }
+
+    // One-line reason this GPU-hot exe does or doesn't start a session.
+    private string GpuVerdict(string exe, double gpu)
+    {
+        if (exe.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase)) return "skipped: this app, never tracked";
+        if (GameCatalog.IsIgnore(exe)) return "skipped: launcher (catalog)";
+        foreach (var line in _settings.IgnoreExes)
+            if (SameExe(ParseGameEntry(line).Exe, exe)) return "skipped: your Ignored list";
+        if (_settings.QuietModeExes.Any(q => SameExe(q, exe))) return "skipped: Quiet Mode";
+        if (IsKnownGame(exe))
+            return SameExe(_gameSessionExe, exe)
+                ? $"TRACKED: listed game, session {FormatElapsed(DateTime.UtcNow - _gameSessionStart)}"
+                : "TRACKED: listed game, running";
+        return gpu >= Math.Max(1, _settings.HeuristicGpuPercent)
+            ? $"unlisted: meets the {_settings.HeuristicGpuPercent}% bar — focus it {_settings.HeuristicStartSeconds}s to confirm"
+            : $"unlisted: below the {_settings.HeuristicGpuPercent}% bar";
+    }
+
     private readonly Dictionary<string, DateTime> _startCache = new(StringComparer.OrdinalIgnoreCase);
 
     private Dictionary<string, DateTime> GetRunningGames(List<(string Exe, string? Name)> games)
@@ -686,13 +805,18 @@ public partial class App : System.Windows.Application
     {
         if (_overlay is null) return;
         if (_confirm is { Active: true }) return; // one prompt at a time
-        var fg = NotificationPolicy.ForegroundExe();
-        if (string.IsNullOrWhiteSpace(fg) || fg.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase))
-            fg = "minecraft.exe"; // demo name when invoked from tray/desktop
-        var display = AutoDisplayName(fg);
+        const string fg = "test-game.exe"; // fake exe: receipt reads as a test, can never collide with a real game
         ClearQueue();
-        _confirm = new ConfirmPrompt(_overlay, _settings, fg, display, OnConfirmDone);
+        _confirm = new ConfirmPrompt(_overlay, _settings, fg, "Test game", OnTestConfirmDone, persist: false);
         _confirm.Start();
+    }
+
+    private void OnTestConfirmDone(string choice, string exe)
+    {
+        try { _confirm?.Dispose(); } catch { }
+        _confirm = null;
+        try { _drainTimer?.Stop(); } catch { }
+        ShowOrQueue("Test popup — nothing saved.", "Games and Ignored lists unchanged.", "confirm-test-done");
     }
 
     private void ClearQueue()

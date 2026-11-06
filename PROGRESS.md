@@ -6,6 +6,7 @@ Update this file every session. One row per test run.
 - Phase: 6 — DONE 2026-11-01 (hardening verified: clean install + corrupt recovery live-tested, Defender scan clean per user)
 - Next action: V1 exit checklist sweep (§11) or public release prep
 - Open (deferred to post-Phase 6): CountWhenRunning ON-path self-test (tick box, alt-tab 2 min); Game-tab crowding polish; repo public release; game+general overlap — both fire by design (late-night time awareness), reconsider game-with-time-only after user testing/feedback; beta debug options in-app (tray Open-logs-folder + Copy-debug-info, startup ver/OS/settings line in debug.log) — docs-only for now, see README Beta debugging
+- Open (filed 2026-11-04): #5 Test confirm popup writes minecraft.exe to Games list — fixed in code 2026-11-04, noted on issue as planned for beta 1.2 (releases currently at beta 1.1)
 - Repo: public since 2026-11-02
 - Config: reset to fresh-install defaults 2026-11-01 at user request
 
@@ -86,6 +87,7 @@ with no database, an invisible untracked clock is unobservable, so it added noth
 | 2026-11-01 | Windows | P6 hardening: Logger (ensure-dir + 512KB rotate), single-instance mutex, crash handlers, corrupt-backup + atomic save, asInvoker manifest, Start-with-Windows checkbox + HKCU Run | Build 0 warn 0 err; Release publish OK to publish/; pending user gates: clean-install + Defender scan |
 | 2026-11-01 | Windows | P6 gates: wiped %AppData%/TimeNotice → fresh launch OK (PID 8900, dir + debug.log recreated, silent unknown-exe); garbage settings.json → corrupt backup + defaults, app alive (PID 12552); Defender clean per user; restored pre-P6 files, relaunched | P6 DONE |
 | 2026-11-02 | Windows | Heuristic dip-grace (SuspectSeconds hold, cand-drop log) + sampler refresh-on-new-pid + null-on-no-match; Save stays open (merge baseline re-snapshot); Settings Topmost-pulse to front; build 0 warn 0 err | Pending user pull + Dota retest on gaming PC |
+| 2026-11-04 | Windows | Filed #5: tray Test confirm timeout-accept persisted minecraft.exe to GameExes (App.xaml.cs:691 demo fg + ConfirmPrompt.cs:120 AddGameExe via prod OnConfirmDone); AGENTS.md now requires GitHub issue + PROGRESS row for every feature/bug | Issue open; workaround = delete minecraft.exe line from settings.json GameExes; fix pending |
 
 ## Ponytail debt (audit 2026-10-21, biggest first)
 - [ ] `Settings.cs`: delete `ReminderMinutes + Position` until a Phase 2 reader exists

@@ -45,3 +45,4 @@ Key routing rules:
 - Save progress → invoke /context-save
 - Resume context → invoke /context-restore
 - Author a backlog-ready spec/issue → invoke /spec
+- Log every feature add and bug as a GitHub issue (gh issue create with bug/feature template) + PROGRESS.md session row; never track work only in chat.

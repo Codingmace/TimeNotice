@@ -8,6 +8,7 @@ public partial class SettingsWindow : Window
     private readonly Settings _settings;
     private readonly Action _onSaved;
     private readonly Func<string, string> _gameDisplay; // App's display resolver (user mapping + catalog + Title-case)
+    private readonly Func<string>? _detectStatus; // App's live detector readout (issue #9), null when unavailable
     private readonly HashSet<string> _openedGames; // entries present when the window opened (confirm adds merge around these)
     private readonly HashSet<string> _openedIgnore;
     private bool _dirty; // any control edited since open or last save
@@ -15,13 +16,15 @@ public partial class SettingsWindow : Window
     private readonly System.Windows.Threading.DispatcherTimer _previewTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DateTime _previewOpenedUtc = DateTime.UtcNow;
 
-    public SettingsWindow(Settings settings, Action onSaved, Func<string, string> gameDisplay)
+    public SettingsWindow(Settings settings, Action onSaved, Func<string, string> gameDisplay, Func<string>? detectStatus = null)
     {
         InitializeComponent();
         Icon = AppIcon.CreateWindowIcon();
+        try { VersionText.Text = $"v{System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?"}"; } catch { }
         _settings = settings;
         _onSaved = onSaved;
         _gameDisplay = gameDisplay;
+        _detectStatus = detectStatus;
         GeneralEnabledBox.IsChecked = _settings.GeneralEnabled;
         StartupBox.IsChecked = _settings.StartWithWindows;
         IntervalBox.Text = _settings.GeneralMinutes.ToString();
@@ -83,21 +86,37 @@ public partial class SettingsWindow : Window
         GameTimePanel.Visibility = GameWindowOnlyBox.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         UpdateWarning();
         RefreshPreviews(); // Previews tab: live from the first frame
+        RefreshDetectStatus(); // Detect tab: what the detector sees right now
         _previewTimer.Tick += (_, _) => RefreshPreviews();
+        _previewTimer.Tick += (_, _) => RefreshDetectStatus();
         _previewTimer.Start();
         // Dirty tracking attaches last so initialization never marks the form edited.
-        foreach (var box in new System.Windows.Controls.TextBox[] { IntervalBox, WindowStartBox, WindowEndBox, GameIntervalBox, GameBox, IgnoreBox, GameWindowStartBox, GameWindowEndBox, DisplayBox, MainTemplateBox, SubTemplateBox, GameMainBox, GameSubBox, GameDetectTemplateBox, GameDetectSubBox, QuietBox, BgBox, TextColorBox, SubColorBox, ConfirmTimeoutBox })
-            box.TextChanged += (_, _) => _dirty = true;
-        foreach (var chk in new System.Windows.Controls.CheckBox[] { GeneralEnabledBox, StartupBox, WindowOnlyBox, GameEnabledBox, CountBox, GameWindowOnlyBox, ShowNextBox, GameNotifyBox, HeurEnabledBox })
+        foreach (var box in new System.Windows.Controls.TextBox[] { IntervalBox, WindowStartBox, WindowEndBox, GameIntervalBox, GameBox, IgnoreBox, GameWindowStartBox, GameWindowEndBox, DisplayBox, MainTemplateBox, SubTemplateBox, GameMainBox, GameSubBox, GameDetectTemplateBox, GameDetectSubBox, QuietBox, BgBox, TextColorBox, SubColorBox, ConfirmTimeoutBox, HeurStartBox, HeurSuspectBox, HeurInactiveBox, HeurGpuBox })
+            box.TextChanged += (_, _) => MarkDirty();
+        foreach (var chk in new System.Windows.Controls.CheckBox[] { GeneralEnabledBox, StartupBox, WindowOnlyBox, GameEnabledBox, CountBox, GameWindowOnlyBox, ShowNextBox, GameNotifyBox, HeurEnabledBox, AlignBox })
         {
-            chk.Checked += (_, _) => _dirty = true;
-            chk.Unchecked += (_, _) => _dirty = true;
+            chk.Checked += (_, _) => MarkDirty();
+            chk.Unchecked += (_, _) => MarkDirty();
         }
-        PositionBox.SelectionChanged += (_, _) => _dirty = true;
-        ThemeBox.SelectionChanged += (_, _) => _dirty = true;
-        ConfirmActionBox.SelectionChanged += (_, _) => _dirty = true;
-        OpacitySlider.ValueChanged += (_, _) => _dirty = true;
+        PositionBox.SelectionChanged += (_, _) => MarkDirty();
+        ThemeBox.SelectionChanged += (_, _) => MarkDirty();
+        ConfirmActionBox.SelectionChanged += (_, _) => MarkDirty();
+        OpacitySlider.ValueChanged += (_, _) => MarkDirty();
+        UpdateSaveState(); // fresh open = no pending edits, Save dimmed
         Closing += OnClosing;
+    }
+
+    private void MarkDirty()
+    {
+        _dirty = true;
+        ErrorText.Text = "";
+        UpdateSaveState();
+    }
+
+    private void UpdateSaveState()
+    {
+        SaveButton.IsEnabled = _dirty;
+        SaveButton.Opacity = _dirty ? 1.0 : 0.5;
     }
 
     // The old flow auto-saved, so a bare close discarding edits surprises. Prompt instead.
@@ -192,6 +211,15 @@ public partial class SettingsWindow : Window
         }
     }
 
+    // Detect tab (issue #9): live detector readout. Read-only label, never
+    // touches the scheduler: opening Settings can itself steal focus, and the
+    // App text says so instead of showing a misleading exe.
+    private void RefreshDetectStatus()
+    {
+        try { DetectStatusText.Text = _detectStatus?.Invoke() ?? "Status unavailable."; }
+        catch { }
+    }
+
     // Previews tab: live read-only samples of every popup, expanded exactly like
     // App.ShowTest/ShowDetect/ConfirmPrompt so what you see is what will fire.
     private void RefreshPreviews()
@@ -238,6 +266,10 @@ public partial class SettingsWindow : Window
                 $"{display} added to Games list.", $"Current time alert interval is {ymins} min.");
             SetPreview(PvRejectBorder, PvRejectMain, PvRejectSub,
                 $"{display} is ignored.", "No time alerts while on the ignored list.");
+            // Inline sample inside Popup tab: same General text but live from the boxes being edited.
+            var liveMain = (MainTemplateBox.Text ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gmins.ToString());
+            var liveSub = (ShowNextBox.IsChecked == true ? (SubTemplateBox.Text ?? "") : "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gmins.ToString());
+            SetPreview(PvInlineBorder, PvInlineMain, PvInlineSub, liveMain, liveSub);
         }
         catch { }
     }
@@ -252,21 +284,51 @@ public partial class SettingsWindow : Window
             exeBlock.Text = exeText;
             exeBlock.Visibility = exeText.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
-        var mode = (_settings.ThemeMode ?? "Dark").Trim();
+        var mode = SelectedTag(ThemeBox);
+        if (string.IsNullOrWhiteSpace(mode)) mode = (_settings.ThemeMode ?? "Dark").Trim();
         if (mode.Equals("MatchHost", StringComparison.OrdinalIgnoreCase)) mode = "Dark"; // preview as Dark, resolved at show time
         string tbg = "#CC1E1E1E", tfg = "#FFFFFFFF", tsg = "#FFBBBBBB";
         if (mode.Equals("Light", StringComparison.OrdinalIgnoreCase)) { tbg = "#FFFFFFFF"; tfg = "#FF111116"; tsg = "#FF5B5B66"; }
-        else if (mode.Equals("Custom", StringComparison.OrdinalIgnoreCase)) { tbg = _settings.CustomBackground; tfg = _settings.CustomText; tsg = _settings.CustomSubText; }
+        else if (mode.Equals("Custom", StringComparison.OrdinalIgnoreCase)) { tbg = BgBox.Text; tfg = TextColorBox.Text; tsg = SubColorBox.Text; }
         border.Background = new System.Windows.Media.SolidColorBrush(OverlayWindow.ParseColor(tbg, "#CC1E1E1E"));
         main.Foreground = new System.Windows.Media.SolidColorBrush(OverlayWindow.ParseColor(tfg, "#FFFFFFFF"));
         sub.Foreground = new System.Windows.Media.SolidColorBrush(OverlayWindow.ParseColor(tsg, "#FFBBBBBB"));
         if (exeBlock is not null) exeBlock.Foreground = sub.Foreground;
-        border.Opacity = Math.Clamp(_settings.Opacity, 0.2, 1.0);
+        var opLive = OpacitySlider.Value / 100.0;
+        if (opLive <= 0) opLive = _settings.Opacity;
+        border.Opacity = Math.Clamp(opLive, 0.2, 1.0);
+    }
+
+    private void PickBg_Click(object sender, RoutedEventArgs e) => PickIntoBox(BgBox);
+    private void PickText_Click(object sender, RoutedEventArgs e) => PickIntoBox(TextColorBox);
+    private void PickSub_Click(object sender, RoutedEventArgs e) => PickIntoBox(SubColorBox);
+
+    // WinForms dialog has no alpha picker: keep the existing #AA prefix, replace only RRGGBB.
+    private void PickIntoBox(System.Windows.Controls.TextBox box)
+    {
+        try
+        {
+            var current = (box.Text ?? "").Trim();
+            string alpha = "FF";
+            if (current.StartsWith("#") && current.Length == 9) alpha = current.Substring(1, 2); // #AARRGGBB
+            using var dlg = new System.Windows.Forms.ColorDialog { FullOpen = true };
+            try
+            {
+                var c = OverlayWindow.ParseColor(current, "#FFFFFFFF");
+                dlg.Color = System.Drawing.Color.FromArgb(c.R, c.G, c.B);
+            }
+            catch { }
+            if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            var picked = $"{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
+            box.Text = current.StartsWith("#") && current.Length == 7 ? $"#{picked}" : $"#{alpha}{picked}"; // keep #RRGGBB style if they used it
+        }
+        catch { }
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
         ErrorText.Text = "";
+        ErrorText.Foreground = System.Windows.Media.Brushes.DarkRed;
         if (!int.TryParse(IntervalBox.Text.Trim(), out var mins) || mins < 1 || mins > 480)
         {
             ErrorText.Text = "General minutes must be 1 to 480.";
@@ -415,6 +477,9 @@ public partial class SettingsWindow : Window
         _settings.Save();
         _onSaved();
         _dirty = false;
+        UpdateSaveState();
+        ErrorText.Foreground = System.Windows.Media.Brushes.Green;
+        ErrorText.Text = $"Saved {DateTime.Now:h:mm:ss tt}.";
         // Stay open: the window is a workspace, not a dialog. Re-snapshot the
         // merge baseline so a second save treats the first save's lines as home.
         _openedGames.Clear();

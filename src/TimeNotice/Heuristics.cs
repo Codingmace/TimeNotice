@@ -164,6 +164,52 @@ public static class Heuristics
             // no _primed reset: existing counters keep valid readings; new ones were primed above
         }
 
+        // Top GPU consumers across ALL processes, for the Detect-tab readout
+        // (issue #9): single-monitor users can't keep the game focused while
+        // Settings is open, so rank by GPU instead of by focus. Resolves exe
+        // via ProcessName only — no MainModule read, so anti-cheat-protected
+        // processes still resolve. Caller throttles; a full enumeration every
+        // tick would spam NextValue calls.
+        public List<(uint Pid, string Exe, double Gpu)> SnapshotTop(int count)
+        {
+            var top = new List<(uint Pid, string Exe, double Gpu)>();
+            if (!Available) return top;
+            try
+            {
+                Refresh(""); // empty tag matches every instance
+                var sums = new Dictionary<uint, double>();
+                foreach (var (name, c) in _counters)
+                {
+                    var pid = ParsePid(name);
+                    if (pid is null) continue;
+                    double v;
+                    try { v = c.NextValue(); } catch { continue; }
+                    sums[pid.Value] = sums.GetValueOrDefault(pid.Value) + v;
+                }
+                foreach (var (pid, sum) in sums.OrderByDescending(kv => kv.Value).Take(Math.Max(1, count)))
+                {
+                    if (sum <= 0) continue;
+                    string exe;
+                    try { using var p = System.Diagnostics.Process.GetProcessById((int)pid); exe = p.ProcessName + ".exe"; }
+                    catch { continue; } // exited between sample and resolve
+                    top.Add((pid, exe, sum));
+                }
+            }
+            catch { }
+            return top;
+        }
+
+        private static uint? ParsePid(string instance)
+        {
+            const string tag = "pid_";
+            var i = instance.IndexOf(tag, StringComparison.OrdinalIgnoreCase);
+            if (i < 0) return null;
+            i += tag.Length;
+            var j = i;
+            while (j < instance.Length && char.IsDigit(instance[j])) j++;
+            return j > i && uint.TryParse(instance.AsSpan(i, j - i), out var pid) ? pid : null;
+        }
+
         public void Dispose()
         {
             foreach (var c in _counters.Values)

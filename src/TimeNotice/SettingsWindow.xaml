@@ -127,6 +127,13 @@
                 <StackPanel Margin="8">
                     <Border Style="{StaticResource Card}">
                     <StackPanel>
+                        <TextBlock Text="Right now" Style="{StaticResource CardTitle}"/>
+                        <TextBlock Text="What the detector sees — read-only, refreshes every second while Settings is open." Style="{StaticResource Hint}"/>
+                        <TextBlock x:Name="DetectStatusText" Text="…" TextWrapping="Wrap" FontFamily="Consolas"/>
+                    </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}">
+                    <StackPanel>
                         <TextBlock Text="Heuristics (unknown games)" Style="{StaticResource CardTitle}"/>
                         <TextBlock Text="Finds unlisted games by fullscreen/GPU + idle. 30s dips never flap." Style="{StaticResource Hint}"/>
                         <CheckBox x:Name="HeurEnabledBox" Content="Enabled" IsChecked="True"/>
@@ -181,17 +188,34 @@
                         </ComboBox>
                         <StackPanel x:Name="CustomColorPanel">
                             <TextBlock Text="Background (#AARRGGBB or #RRGGBB)" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="BgBox" Text="#CC1E1E1E"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox x:Name="BgBox" Text="#CC1E1E1E" Width="220"/>
+                                <Button Content="Pick…" Padding="10,2" Margin="8,4,0,4" Click="PickBg_Click"/>
+                            </StackPanel>
                             <TextBlock Text="Main text color" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="TextColorBox" Text="#FFFFFFFF"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox x:Name="TextColorBox" Text="#FFFFFFFF" Width="220"/>
+                                <Button Content="Pick…" Padding="10,2" Margin="8,4,0,4" Click="PickText_Click"/>
+                            </StackPanel>
                             <TextBlock Text="Sub text color" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="SubColorBox" Text="#FFBBBBBB"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox x:Name="SubColorBox" Text="#FFBBBBBB" Width="220"/>
+                                <Button Content="Pick…" Padding="10,2" Margin="8,4,0,4" Click="PickSub_Click"/>
+                            </StackPanel>
                         </StackPanel>
                         <TextBlock Text="Popup opacity" Style="{StaticResource FieldLabel}"/>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Slider x:Name="OpacitySlider" Minimum="20" Maximum="100" Width="220" Margin="0,4,8,4" TickFrequency="5" IsSnapToTickEnabled="True"/>
                             <TextBlock x:Name="OpacityLabel" Text="92%" VerticalAlignment="Center" FontSize="12" Foreground="#3A3A42"/>
                         </StackPanel>
+                        <Expander Header="Live preview" IsExpanded="False" Margin="0,8,0,0">
+                            <Border x:Name="PvInlineBorder" CornerRadius="10" Padding="14,10" Margin="0,4,0,0" MaxWidth="320" HorizontalAlignment="Left">
+                                <StackPanel>
+                                    <TextBlock x:Name="PvInlineMain" FontSize="26" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="PvInlineSub" FontSize="13" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </Expander>
                     </StackPanel>
                     </Border>
                     <Border Style="{StaticResource Card}">
@@ -295,11 +319,18 @@
 
         <StackPanel Grid.Row="2">
         <TextBlock x:Name="WarnText" Foreground="#B45309" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,4"/>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button x:Name="SaveButton" Content="Save" Width="90" Padding="10,5" Margin="0,0,8,0"
-                    Background="#2563EB" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Click="Save_Click"/>
-            <Button x:Name="CancelButton" Content="Cancel" Width="90" Padding="10,5" Click="Cancel_Click"/>
-        </StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="VersionText" Grid.Column="0" VerticalAlignment="Center" FontSize="12" Foreground="#6B6B74"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="SaveButton" Content="Save" Width="90" Padding="10,5" Margin="0,0,8,0"
+                        Background="#2563EB" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Click="Save_Click"/>
+                <Button x:Name="CancelButton" Content="Cancel" Width="90" Padding="10,5" Click="Cancel_Click"/>
+            </StackPanel>
+        </Grid>
         <TextBlock x:Name="ErrorText" Foreground="#B91C1C" Margin="0,4,0,0" TextWrapping="Wrap"/>
         </StackPanel>
     </Grid>

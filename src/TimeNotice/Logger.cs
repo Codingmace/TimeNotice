@@ -9,12 +9,26 @@ public static class Logger
 {
     private const long MaxBytes = 512 * 1024;
 
+    public static string LogPath => System.IO.Path.Combine(Settings.Dir, "debug.log");
+    public static string LogOldPath => LogPath + ".old";
+
+    public static void Clear()
+    {
+        try
+        {
+            Directory.CreateDirectory(Settings.Dir);
+            File.WriteAllText(LogPath, "");
+            Log("src=log-cleared");
+        }
+        catch { }
+    }
+
     public static void Log(string msg)
     {
         try
         {
             Directory.CreateDirectory(Settings.Dir);
-            var file = System.IO.Path.Combine(Settings.Dir, "debug.log");
+            var file = LogPath;
             try
             {
                 var info = new FileInfo(file);

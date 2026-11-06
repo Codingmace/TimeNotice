@@ -26,6 +26,7 @@ public sealed class ConfirmPrompt : IDisposable
     private readonly string _exe;
     private readonly string _display;
     private readonly Action<string, string> _onDone;
+    private readonly bool _persist; // false = dry run: test popup never touches Games/Ignored
     private DispatcherTimer? _poll;
     private DateTime _deadlineUtc;
     private bool _done;
@@ -34,13 +35,14 @@ public sealed class ConfirmPrompt : IDisposable
 
     public bool Active => !_done;
 
-    public ConfirmPrompt(OverlayWindow overlay, Settings settings, string exe, string display, Action<string, string> onDone)
+    public ConfirmPrompt(OverlayWindow overlay, Settings settings, string exe, string display, Action<string, string> onDone, bool persist = true)
     {
         _overlay = overlay;
         _settings = settings;
         _exe = exe;
         _display = display;
         _onDone = onDone;
+        _persist = persist;
     }
 
     public void Start()
@@ -112,7 +114,8 @@ public sealed class ConfirmPrompt : IDisposable
             var timeoutAccepts = _settings.ConfirmTimeoutAction.Equals("Accept", StringComparison.OrdinalIgnoreCase);
             var accept = choice.StartsWith("accept-key", StringComparison.OrdinalIgnoreCase)
                 || (timeout && timeoutAccepts);
-            if (accept)
+            if (!_persist) { /* dry-run test: never write */ }
+            else if (accept)
             {
                 var raw = _exe;
                 if (!string.IsNullOrWhiteSpace(_display) && !_display.Equals(DefaultDisplay(_exe), StringComparison.OrdinalIgnoreCase))
