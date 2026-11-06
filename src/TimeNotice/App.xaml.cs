@@ -760,9 +760,16 @@ public partial class App : System.Windows.Application
 
     internal static DateTime NextBoundary(DateTime nowLocal, int minutes)
     {
-        // Next is strictly after now: on-the-boundary ticks show the coming
-        // boundary, never now (which rendered "It is now 5:15, Next: 5:15").
-        return FloorBoundary(nowLocal, minutes).AddMinutes(Math.Max(1, minutes));
+        // First grid boundary strictly after now. The grid restarts at :00
+        // every hour, so near the hour a short gap replaces the overshoot
+        // (7m at 1:57 -> 2:00, not 2:03). On-the-boundary ticks show the
+        // coming boundary, never now (which rendered "Next: 5:15" at 5:15).
+        minutes = Math.Max(1, minutes);
+        var hourStart = nowLocal.Date.AddHours(nowLocal.Hour);
+        var elapsed = (nowLocal - hourStart).TotalMinutes;
+        var k = (int)Math.Floor(elapsed / minutes) + 1;
+        if (k * minutes < 60) return hourStart.AddMinutes(k * minutes);
+        return hourStart.AddHours(1);
     }
 
     private bool IsGeneralDue(DateTime nowUtc, DateTime nowLocal, DateTime lastUtc, int minutes)
@@ -884,7 +891,23 @@ public partial class App : System.Windows.Application
         var mins = isGame ? Math.Max(1, _settings.GameMinutes) : Math.Max(1, _settings.GeneralMinutes);
         var nowLocal = DateTime.Now;
         var nowStr = nowLocal.ToString("h:mm tt");
-        var nextStr = (_settings.AlignToClock ? NextBoundary(nowLocal, mins) : nowLocal.AddMinutes(mins)).ToString("h:mm tt");
+        // Align is general-only (game fires on elapsed time): under Align the
+        // shown wait is the true gap to the coming boundary, so duration and
+        // time always agree (30m at 1:29 -> "in 1m at 1:30"). Anchored on the
+        // last fire when it is still ahead, else the coming boundary.
+        var nextLocal = nowLocal.AddMinutes(mins);
+        var showMins = mins;
+        if (_settings.AlignToClock && !isGame)
+        {
+            nextLocal = NextBoundary(nowLocal, mins);
+            if (_lastGeneral != default)
+            {
+                var cand = NextBoundary(_lastGeneral.ToLocalTime(), mins);
+                if (cand > nowLocal) nextLocal = cand;
+            }
+            showMins = Math.Max(1, (int)Math.Ceiling((nextLocal - nowLocal).TotalMinutes));
+        }
+        var nextStr = nextLocal.ToString("h:mm tt");
         var gameDisplay = source == "manual-game" ? "Test game" : ResolveGameDisplay(fg, isGame);
         var elapsed = source == "manual-game" ? "0 min"
             : isGame && _gameSessionExe is not null ? FormatElapsed(DateTime.UtcNow - _gameSessionStart) : (isGame ? "0 min" : "");
@@ -894,12 +917,12 @@ public partial class App : System.Windows.Application
         var subTpl = isGame
             ? (string.IsNullOrWhiteSpace(_settings.GameSubTemplate) ? Settings.DefaultGameSubTemplate : _settings.GameSubTemplate)
             : _settings.SubTemplate;
-        var main = (mainTpl ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", gameDisplay).Replace("{elapsed}", elapsed).Replace("{interval}", mins.ToString());
+        var main = (mainTpl ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", gameDisplay).Replace("{elapsed}", elapsed).Replace("{interval}", showMins.ToString());
         if (string.IsNullOrWhiteSpace(main)) main = nowStr;
         var sub = "";
         if (_settings.ShowSession)
         {
-            sub = (subTpl ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", gameDisplay).Replace("{elapsed}", elapsed).Replace("{interval}", mins.ToString());
+            sub = (subTpl ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", gameDisplay).Replace("{elapsed}", elapsed).Replace("{interval}", showMins.ToString());
         }
         ShowOrQueue(main, sub, source);
     }

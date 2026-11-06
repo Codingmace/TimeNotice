@@ -338,8 +338,13 @@ public partial class SettingsWindow : Window
             var nowStr = nowLocal.ToString("h:mm tt");
             var gmins = Math.Max(1, _settings.GeneralMinutes);
             var ymins = Math.Max(1, _settings.GameMinutes);
-            var nextStr = (_settings.AlignToClock ? App.NextBoundary(nowLocal, gmins) : nowLocal.AddMinutes(gmins)).ToString("h:mm tt");
-            var gameNext = (_settings.AlignToClock ? App.NextBoundary(nowLocal, ymins) : nowLocal.AddMinutes(ymins)).ToString("h:mm tt");
+            // Preview mirrors ShowTest: Align is general-only, and the shown
+            // wait is the true gap to the coming boundary (no last-fire here,
+            // so the coming boundary stands in). Game previews count from now.
+            var gNext = _settings.AlignToClock ? App.NextBoundary(nowLocal, gmins) : nowLocal.AddMinutes(gmins);
+            var gShow = _settings.AlignToClock ? Math.Max(1, (int)Math.Ceiling((gNext - nowLocal).TotalMinutes)) : gmins;
+            var nextStr = gNext.ToString("h:mm tt");
+            var gameNext = nowLocal.AddMinutes(ymins).ToString("h:mm tt");
             var elapsed = App.FormatElapsed(DateTime.UtcNow - _previewOpenedUtc); // sample session clock
             string exe = "newgame.exe";
             foreach (var line in _settings.GameExes)
@@ -351,8 +356,8 @@ public partial class SettingsWindow : Window
             }
             var display = _gameDisplay(exe);
             SetPreview(PvGeneralBorder, PvGeneralMain, PvGeneralSub,
-                (_settings.MainTemplate ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gmins.ToString()),
-                _settings.ShowSession ? (_settings.SubTemplate ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gmins.ToString()) : "");
+                (_settings.MainTemplate ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gShow.ToString()),
+                _settings.ShowSession ? (_settings.SubTemplate ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gShow.ToString()) : "");
             var gm = string.IsNullOrWhiteSpace(_settings.GameMainTemplate) ? Settings.DefaultGameMainTemplate : _settings.GameMainTemplate;
             var gs = string.IsNullOrWhiteSpace(_settings.GameSubTemplate) ? Settings.DefaultGameSubTemplate : _settings.GameSubTemplate;
             SetPreview(PvGameBorder, PvGameMain, PvGameSub,
@@ -375,8 +380,8 @@ public partial class SettingsWindow : Window
             SetPreview(PvRejectBorder, PvRejectMain, PvRejectSub,
                 $"{display} is ignored.", "No time alerts while on the ignored list.");
             // Inline sample inside Popup tab: same General text but live from the boxes being edited.
-            var liveMain = (MainTemplateBox.Text ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gmins.ToString());
-            var liveSub = (ShowNextBox.IsChecked == true ? (SubTemplateBox.Text ?? "") : "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gmins.ToString());
+            var liveMain = (MainTemplateBox.Text ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gShow.ToString());
+            var liveSub = (ShowNextBox.IsChecked == true ? (SubTemplateBox.Text ?? "") : "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gShow.ToString());
             SetPreview(PvInlineBorder, PvInlineMain, PvInlineSub, liveMain, liveSub);
         }
         catch { }
