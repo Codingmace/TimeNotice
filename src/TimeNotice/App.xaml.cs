@@ -507,8 +507,7 @@ public partial class App : System.Windows.Application
         }
         var hit = GameCatalog.Find(exe); // catalog display when user gave a bare exe
         if (hit is not null) return hit.Display;
-        var bare = exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? exe[..^4] : exe;
-        return bare.Length > 0 ? char.ToUpperInvariant(bare[0]) + bare[1..] : exe; // ponytail: auto Title-case, override with "exe = Name"
+        return Settings.TitleCaseExe(exe); // ponytail: auto Title-case, override with "exe = Name"
     }
 
     // Detect-tab live readout (issue #9): plain-words snapshot of what the
@@ -712,20 +711,24 @@ public partial class App : System.Windows.Application
     private void OnOverlayHidden()
     {
         if (_queuedMain is null) return;
+        _drainTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(QueueGapSeconds) };
+        _drainTimer.Tick -= DrainQueueTick; // one reused timer: never stack handlers
+        _drainTimer.Tick += DrainQueueTick;
+        _drainTimer.Stop();
+        _drainTimer.Start();
+    }
+
+    private void DrainQueueTick(object? sender, EventArgs e)
+    {
+        _drainTimer?.Stop();
+        if (_queuedMain is null) return;
         var main = _queuedMain;
         var sub = _queuedSub ?? "";
         var source = _queuedSource;
         _queuedMain = null;
         _queuedSub = null;
-        _drainTimer?.Stop();
-        _drainTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(QueueGapSeconds) };
-        _drainTimer.Tick += (_, _) =>
-        {
-            _drainTimer?.Stop();
-            Logger.Log($"src=queued-shown orig={source}");
-            _overlay?.ShowReminder(main, sub);
-        };
-        _drainTimer.Start();
+        Logger.Log($"src=queued-shown orig={source}");
+        _overlay?.ShowReminder(main, sub);
     }
 
     private bool InWindow(DateTime now)
@@ -856,8 +859,9 @@ public partial class App : System.Windows.Application
         try { _confirm?.Dispose(); } catch { }
         _confirm = null;
         try { _drainTimer?.Stop(); } catch { } // stale drain must not overwrite the receipt
+        var timeoutAccepts = _settings.ConfirmTimeoutAction.Equals("Accept", StringComparison.OrdinalIgnoreCase);
         var accepted = choice.StartsWith("accept-key", StringComparison.OrdinalIgnoreCase)
-            || choice.Equals("timeout-default-accept", StringComparison.OrdinalIgnoreCase);
+            || (choice.StartsWith("timeout", StringComparison.OrdinalIgnoreCase) && timeoutAccepts);
         if (accepted) _detectSeen.Add(exe); // just approved: skip the follow-up "matched" pop for this game
         var display = GameDisplayName(exe);
         var main = accepted
@@ -943,6 +947,7 @@ public partial class App : System.Windows.Application
         }
         if (isGame)
         {
+            if (!string.IsNullOrWhiteSpace(_lastActiveGameExe)) return GameDisplayName(_lastActiveGameExe); // running session names the popup, not the first list entry
             foreach (var line in _settings.GameExes)
             {
                 var (e, _) = ParseGameEntry(line);

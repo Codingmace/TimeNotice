@@ -103,6 +103,7 @@ public static class NotificationPolicy
     {
         if (s.PauseAll) return true;
         if (string.IsNullOrWhiteSpace(exe)) return false; // fail-open for Phase 1
-        return s.QuietModeExes.Any(q => string.Equals(q, exe, StringComparison.OrdinalIgnoreCase));
+        // Loose match like everywhere else: "notepad" and "notepad.exe = Notepad" both silence notepad.exe (#25).
+        return s.QuietModeExes.Any(q => string.Equals(Settings.ExeKey(q), Settings.ExeKey(exe), StringComparison.OrdinalIgnoreCase));
     }
 }

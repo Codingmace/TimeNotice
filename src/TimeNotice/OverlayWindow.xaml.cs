@@ -161,12 +161,13 @@ public partial class OverlayWindow : Window
                 var mi = new MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<MONITORINFO>() };
                 if (GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), ref mi))
                 {
-                    // Monitor APIs report physical pixels; WPF positions in device-independent units.
+                    // Monitor APIs report physical pixels; WPF positions in device-independent units,
+                    // so divide by the scale (150% text = 144 dpi, so 1920px = 1280 units).
                     double scale = 1.0;
                     try { scale = GetDpiForWindow(hwnd) / 96.0; } catch { }
                     if (scale <= 0) scale = 1.0;
-                    var tl = new System.Windows.Point(mi.rcWork.Left * scale, mi.rcWork.Top * scale);
-                    var br = new System.Windows.Point(mi.rcWork.Right * scale, mi.rcWork.Bottom * scale);
+                    var tl = new System.Windows.Point(mi.rcWork.Left / scale, mi.rcWork.Top / scale);
+                    var br = new System.Windows.Point(mi.rcWork.Right / scale, mi.rcWork.Bottom / scale);
                     area = new Rect(tl, br);
                 }
             }

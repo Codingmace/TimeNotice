@@ -35,7 +35,7 @@ public static class GameCatalog
     // GPU-spiky non-game apps (video calls, screenshare, recording): sustained GPU + focus
     // would otherwise promote them to heuristic sessions. Ignored, never gameplay.
     // Exe spellings are the vendor client process names; matching is case-insensitive.
-    public static List<string> DefaultExtraIgnored() => new()
+    private static readonly List<string> ExtraIgnored = new()
     {
         "discord.exe",
         "Zoom.exe",
@@ -45,17 +45,23 @@ public static class GameCatalog
         "obs64.exe",
     };
 
+    private static readonly HashSet<string> ExtraIgnoreKeys =
+        new(ExtraIgnored.Select(StripExe), StringComparer.OrdinalIgnoreCase);
+
+    public static List<string> DefaultExtraIgnored() => ExtraIgnored.ToList(); // copy: the shared table must never escape mutable
+
+    private static string StripExe(string? exe)
+    {
+        var key = (exe ?? "").Trim();
+        if (key.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) key = key[..^4];
+        return key;
+    }
+
     public static CatalogEntry? Find(string? exe)
     {
         if (string.IsNullOrWhiteSpace(exe)) return null;
-        var key = exe.Trim();
-        if (key.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) key = key[..^4];
-        return Entries.FirstOrDefault(e =>
-        {
-            var c = e.Exe;
-            if (c.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) c = c[..^4];
-            return string.Equals(c, key, StringComparison.OrdinalIgnoreCase);
-        });
+        var key = StripExe(exe);
+        return Entries.FirstOrDefault(e => string.Equals(StripExe(e.Exe), key, StringComparison.OrdinalIgnoreCase));
     }
 
     public static bool IsIgnore(string? exe)
@@ -66,13 +72,6 @@ public static class GameCatalog
         // where settings.json was never seeded (user clear still respected via
         // Settings.IgnoreExes display; this is the runtime safety net).
         if (string.IsNullOrWhiteSpace(exe)) return false;
-        var key = exe.Trim();
-        if (key.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) key = key[..^4];
-        return DefaultExtraIgnored().Any(x =>
-        {
-            var c = x;
-            if (c.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) c = c[..^4];
-            return string.Equals(c, key, StringComparison.OrdinalIgnoreCase);
-        });
+        return ExtraIgnoreKeys.Contains(StripExe(exe));
     }
 }

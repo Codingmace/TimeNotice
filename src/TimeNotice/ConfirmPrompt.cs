@@ -99,7 +99,7 @@ public sealed class ConfirmPrompt : IDisposable
         _prevZ = downZ; _prevX = downX;
         if (hitZ) Resolve("accept-key-Z");
         else if (hitX) Resolve("reject-key-X");
-        else if (secs <= 0) Resolve("timeout-default-accept");
+        else if (secs <= 0) Resolve("timeout-elapsed");
     }
 
     private void Resolve(string choice)
@@ -118,7 +118,8 @@ public sealed class ConfirmPrompt : IDisposable
             else if (accept)
             {
                 var raw = _exe;
-                if (!string.IsNullOrWhiteSpace(_display) && !_display.Equals(DefaultDisplay(_exe), StringComparison.OrdinalIgnoreCase))
+                // Only store "exe = Name" when the name is richer than Title-case (javaw.exe = Minecraft).
+                if (!string.IsNullOrWhiteSpace(_display) && !_display.Equals(Settings.TitleCaseExe(_exe), StringComparison.OrdinalIgnoreCase))
                     raw = $"{_exe} = {_display}"; // friendly name from window title, e.g. javaw.exe = Minecraft
                 _settings.AddGameExe(raw); // sanitized + merged inside; timeout-accept honors the configured action
             }
@@ -130,14 +131,6 @@ public sealed class ConfirmPrompt : IDisposable
         catch { }
         Log($"src=confirm-result choice={choice} exe={_exe}");
         try { _onDone(choice, _exe); } catch { }
-    }
-
-    // Mirrors the Title-case fallback in App.GameDisplayName: anything richer
-    // than this is a friendly name worth storing (javaw.exe -> Minecraft).
-    private static string DefaultDisplay(string exe)
-    {
-        var bare = exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? exe[..^4] : exe;
-        return bare.Length > 0 ? char.ToUpperInvariant(bare[0]) + bare[1..] : exe;
     }
 
     private static void Log(string msg)

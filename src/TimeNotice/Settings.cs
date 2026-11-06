@@ -184,6 +184,14 @@ public sealed class Settings
         return name.Length == 0 ? exe : $"{exe} = {name}";
     }
 
+    // Single Title-case fallback shared by popups, confirms, and previews.
+    internal static string TitleCaseExe(string? exe)
+    {
+        var t = ExeKey(exe);
+        if (t.Length == 0) return exe ?? "";
+        return char.ToUpperInvariant(t[0]) + t[1..];
+    }
+
     // Same key App.SameExe matches on (mapping suffix and .exe stripped). Keep in sync.
     internal static string ExeKey(string? s)
     {
@@ -237,10 +245,13 @@ public sealed class Settings
 
     public void Save()
     {
-        Directory.CreateDirectory(Dir);
-        // Atomic write: temp + move so a crash/power loss never leaves a torn settings.json.
-        var tmp = Path + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
-        File.Move(tmp, Path, overwrite: true);
+        lock (_saveLock) // every save path serializes here: confirm-timeout vs Settings-window can no longer interleave
+        {
+            Directory.CreateDirectory(Dir);
+            // Atomic write: temp + move so a crash/power loss never leaves a torn settings.json.
+            var tmp = Path + ".tmp";
+            File.WriteAllText(tmp, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+            File.Move(tmp, Path, overwrite: true);
+        }
     }
 }

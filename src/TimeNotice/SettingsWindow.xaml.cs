@@ -101,7 +101,8 @@ public partial class SettingsWindow : Window
         RefreshPreviews(); // Previews tab: live from the first frame
         RefreshDetectStatus(); // Detect tab: what the detector sees right now
         _previewTimer.Tick += (_, _) => RefreshPreviews();
-        _previewTimer.Tick += (_, _) => RefreshDetectStatus();
+        var detectTicks = 0; // Detect readout re-ranks GPU processes: every 5th second is enough
+        _previewTimer.Tick += (_, _) => { if (++detectTicks % 5 == 0) RefreshDetectStatus(); };
         _previewTimer.Tick += (_, _) => SyncListBoxesFromLive();
         _previewTimer.Start();
         // Dirty tracking attaches last so initialization never marks the form edited.

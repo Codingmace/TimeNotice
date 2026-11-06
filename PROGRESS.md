@@ -114,12 +114,12 @@ with no database, an invisible untracked clock is unobservable, so it added noth
 | 2026-11-06 | Windows | Fixed #14 (separate text opacity + box-off): Settings TextOpacity 1.0 default + ShowBox checkbox; OverlayWindow per-element opacity (window stays 1.0 for fade range), previews read live sliders; Popup tab Box/Text sliders; defaults preserve 92% box look; build 0 warn 0 err | Fixed, pending user gate test (box 92 + text 100 default, uncheck box = text-only, drag text slider) + push |
 | 2026-11-06 | Windows | Fixed #17 (XAML-only): moved Try a popup card Detect → Popup tab after Confirm card, same TestGeneral/TestGame/TestConfirm handlers; Previews stays read-only; build 0 warn 0 err | Fixed, pending user gate test (Popup tab fires, Detect tab no longer has it) + push |
 | 2026-11-06 | Windows | Appended PlateUp wipe log to #16: confirm-accept 01:25:10 then interval-test Saves wiped Games entry; root-caused to Save #2 on pre-8c39272 binary (merge on #1, stale box + re-snapshotted baseline deletes on #2); fix already in tree, gate = Save twice on 1.4 build | Comment live, no code change, pending 1.4 gate retest |
+| 2026-11-06 | Windows | Audit fixes for 1.4: closed #21/#22/#23/#24/#25 in code (DPI divide, Quiet ExeKey match, timeout receipt honors setting, Save lock, TitleCaseExe single helper, shared ignore keys, session-exe test wording, drain-timer reuse, Detect 5s throttle, debt notes fixed); #20 tests attempted then reverted (xunit compiles but Application Control blocks the test assembly here, 0x800711C7 — retry on unblocked machine); build 0 warn 0 err | Fix built, pending user gate tests per issue, slated beta 1.4 |
 
 | 2026-11-06 | Windows | Filed #19 + fixed Detect launcher wording (GpuVerdict "skipped: built-in Ignored list", comment standardized; compat key kept per issue), build 0 warn 0 err | Fixed, pending gate test + push, slated beta 1.4 |
 
-## Ponytail debt (audit 2026-10-21, biggest first)
-- [ ] `Settings.cs`: delete `ReminderMinutes + Position` until a Phase 2 reader exists
-- [ ] `SCOPE.md` §8: trim `scale, monitor, perApp, startWithWindows` to shipped fields until needed
+## Ponytail debt (audit 2026-10-21, rechecked 2026-11-06: Position + ReminderMinutes are live, SCOPE §8 stands as scope record)
+- [ ] `Settings.cs`: delete `LauncherExes` pre-rename key after one release carries the merge (Load merges it into IgnoreExes, then drops it)
 - [ ] Overlay: collapse `SubText`/`ShowSession` branch to one static test line until Phase 2 copy
 - (empty-row cleanup done in this edit)
 
