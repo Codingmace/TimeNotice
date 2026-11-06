@@ -254,22 +254,9 @@ public partial class App : System.Windows.Application
         var fg = _lastNonSelfFg;
         if (string.IsNullOrWhiteSpace(fg)) return "Nothing focused yet — focus an app first.";
         if (NotificationPolicy.IsSelf(fg)) return "That is this app — never listed.";
-        if (target == "games")
-        {
-            if (!_settings.GameExes.Any(l => SameExe(ParseGameEntry(l).Exe, fg)))
-                _settings.GameExes.Add(fg);
-        }
-        else if (target == "quiet")
-        {
-            if (!_settings.QuietModeExes.Any(q => SameExe(q, fg)))
-                _settings.QuietModeExes.Add(fg);
-        }
-        else
-        {
-            if (!_settings.IgnoreExes.Any(l => SameExe(ParseGameEntry(l).Exe, fg)))
-                _settings.IgnoreExes.Add(fg);
-        }
-        _settings.Save();
+        if (target == "games") _settings.AddGameExe(fg);
+        else if (target == "quiet") _settings.AddQuietExe(fg);
+        else _settings.AddIgnoreExe(fg);
         Logger.Log($"src=classify fg={fg} target={target}");
         return $"{fg} saved to {target}.";
     }

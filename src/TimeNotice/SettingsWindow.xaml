@@ -91,7 +91,7 @@
                         <TextBlock Text="Uses its own interval while a listed game is focused." Style="{StaticResource Hint}"/>
                         <CheckBox x:Name="GameEnabledBox" Content="Enabled"/>
                         <TextBlock Text="Every Y minutes while game is active" Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="GameIntervalBox" Text="60"/>
+                        <TextBox x:Name="GameIntervalBox" Text="30"/>
                         <CheckBox x:Name="CountBox" Content="Count while merely running (no focus needed)"/>
                         <TextBlock Text="Games (one exe per line — spotify.exe = Spotify)" Style="{StaticResource FieldLabel}"/>
                         <TextBox x:Name="GameBox" Height="70"
@@ -159,7 +159,7 @@
                         <TextBlock Text="Suspect minutes before session closes" Style="{StaticResource FieldLabel}"/>
                         <TextBox x:Name="HeurInactiveBox" Text="5"/>
                         <TextBlock Text="GPU % that counts as active" Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="HeurGpuBox" Text="5"/>
+                        <TextBox x:Name="HeurGpuBox" Text="10"/>
                     </StackPanel>
                     </Border>
                 </StackPanel>
@@ -179,7 +179,7 @@
                         <TextBox x:Name="SubTemplateBox" Text="Next time alert in {interval} min"/>
                         <CheckBox x:Name="ShowNextBox" Content="Show sub line" IsChecked="True"/>
                         <TextBlock Text="Box stays (seconds)" Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="DisplayBox" Text="5"/>
+                        <TextBox x:Name="DisplayBox" Text="10"/>
                     </StackPanel>
                     </Border>
 

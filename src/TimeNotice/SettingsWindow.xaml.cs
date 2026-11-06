@@ -187,7 +187,7 @@ public partial class SettingsWindow : Window
     private void UpdateWarning()
     {
         WarnText.Text = "";
-        var okSecs = int.TryParse(DisplayBox.Text.Trim(), out var secs) ? secs : 5;
+        var okSecs = int.TryParse(DisplayBox.Text.Trim(), out var secs) ? secs : 10;
         var need = okSecs + 2; // box time + queue gap, seconds
         if (GeneralEnabledBox.IsChecked == true
             && int.TryParse(IntervalBox.Text.Trim(), out var mins)

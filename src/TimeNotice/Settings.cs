@@ -43,7 +43,8 @@ public sealed class Settings
     public List<string> QuietModeExes { get; set; } = new();
     public List<string> IgnoreExes { get; set; } = new();
     // ponytail: pre-rename key — Load merges it into IgnoreExes once, then drops it; delete this property next cleanup
-    public List<string> LauncherExes { get; set; } = new();
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? LauncherExes { get; set; }
     public bool HeuristicEnabled { get; set; } = true;
     public int HeuristicStartSeconds { get; set; } = 60; // sustained active before a session is found
     public int HeuristicSuspectSeconds { get; set; } = 30; // fg loss/idle before SUSPECT
@@ -63,6 +64,22 @@ public sealed class Settings
 
     public static string Path => System.IO.Path.Combine(Dir, "settings.json");
 
+    private static Settings SeedDefaults()
+    {
+        var fresh = new Settings();
+        fresh.IgnoreExes = GameCatalog.DefaultIgnored()
+            .Concat(GameCatalog.DefaultExtraIgnored()).ToList();
+        return fresh;
+    }
+
+    private static Settings SeedWithReset(string? backup)
+    {
+        var reset = SeedDefaults();
+        reset.WasResetFromCorrupt = true;
+        reset.CorruptBackupPath = backup;
+        return reset;
+    }
+
     public static Settings Load()
     {
         Settings s;
@@ -76,10 +93,7 @@ public sealed class Settings
             }
             else
             {
-                var fresh = new Settings();
-                fresh.IgnoreExes = GameCatalog.DefaultIgnored()
-                    .Concat(GameCatalog.DefaultExtraIgnored()).ToList();
-                return fresh;
+                return SeedDefaults();
             }
         }
         catch
@@ -93,11 +107,11 @@ public sealed class Settings
                 File.Copy(Path, backup, overwrite: false);
             }
             catch { backup = null; }
-            return new Settings { WasResetFromCorrupt = true, CorruptBackupPath = backup };
+            return SeedWithReset(backup);
         }
         if (s.GeneralMinutes <= 0) s.GeneralMinutes = s.ReminderMinutes > 0 ? s.ReminderMinutes : 30; // migrate Phase 2 file
         s.ReminderMinutes = s.GeneralMinutes; // keep legacy in sync
-        if (s.GameMinutes <= 0) s.GameMinutes = 60;
+        if (s.GameMinutes <= 0) s.GameMinutes = 30;
         if (string.IsNullOrWhiteSpace(s.GameWindowStart)) s.GameWindowStart = "09:00";
         if (string.IsNullOrWhiteSpace(s.GameWindowEnd)) s.GameWindowEnd = "23:00";
         if (string.IsNullOrWhiteSpace(s.MainTemplate)) s.MainTemplate = "It is now {time}";
@@ -118,9 +132,9 @@ public sealed class Settings
         if (string.IsNullOrWhiteSpace(s.CustomText)) s.CustomText = "#FFFFFFFF";
         if (string.IsNullOrWhiteSpace(s.CustomSubText)) s.CustomSubText = "#FFBBBBBB";
         if (s.IgnoreExes is null) s.IgnoreExes = new();
-        if (s.IgnoreExes.Count == 0 && s.LauncherExes is not null && s.LauncherExes.Count > 0)
-            s.IgnoreExes = s.LauncherExes; // one-version migration from the LauncherExes key
-        s.LauncherExes = new(); // stop writing the old key
+        if (s.LauncherExes is not null && s.LauncherExes.Count > 0)
+            s.IgnoreExes.AddRange(s.LauncherExes); // one-version migration from the LauncherExes key
+        s.LauncherExes = null; // stop writing the old key
         s.IgnoreExes = s.IgnoreExes
             .Select(x => (x ?? "").Trim()).Where(x => x.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -158,10 +172,8 @@ public sealed class Settings
         if (string.IsNullOrWhiteSpace(GameSubTemplate)) GameSubTemplate = DefaultGameSubTemplate;
         GameExes = NormalizeExeList(GameExes);
         IgnoreExes = NormalizeExeList(IgnoreExes);
-        QuietModeExes = (QuietModeExes ?? new())
-            .Select(x => (x ?? "").Trim()).Where(x => x.Length > 0)
-            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        QuietModeExes.RemoveAll(q => q.Equals("example-game.exe", StringComparison.OrdinalIgnoreCase)); // drop the shipped placeholder
+        QuietModeExes = NormalizeExeList(QuietModeExes);
+        QuietModeExes.RemoveAll(q => ExeKey(q).Equals("example-game", StringComparison.OrdinalIgnoreCase)); // drop the shipped placeholder
     }
 
     private static bool IsColorLike(string? text)
@@ -238,6 +250,19 @@ public sealed class Settings
             if (clean.Length > 0 && !IgnoreExes.Any(l => string.Equals(ExeKey(l), ExeKey(clean), StringComparison.OrdinalIgnoreCase)))
             {
                 IgnoreExes.Add(clean);
+                Save();
+            }
+        }
+    }
+
+    public void AddQuietExe(string exe)
+    {
+        lock (_saveLock)
+        {
+            var clean = SanitizeListLine(exe);
+            if (clean.Length > 0 && !QuietModeExes.Any(l => string.Equals(ExeKey(l), ExeKey(clean), StringComparison.OrdinalIgnoreCase)))
+            {
+                QuietModeExes.Add(clean);
                 Save();
             }
         }
