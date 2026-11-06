@@ -9,6 +9,9 @@ public partial class SettingsWindow : Window
     private readonly Action _onSaved;
     private readonly Func<string, string> _gameDisplay; // App's display resolver (user mapping + catalog + Title-case)
     private readonly Func<string>? _detectStatus; // App's live detector readout (issue #9), null when unavailable
+    private readonly Func<string?>? _lastFocus; // App's last non-self focus, shown before classifying (#11)
+    private readonly Func<string, string>? _classifyFocus; // App's classify-last-focus, returns a receipt line
+    private readonly Action<string>? _testPopup; // App's test-popup path: general / game / confirm
     private readonly HashSet<string> _openedGames; // entries present when the window opened (confirm adds merge around these)
     private readonly HashSet<string> _openedIgnore;
     private bool _dirty; // any control edited since open or last save
@@ -16,7 +19,7 @@ public partial class SettingsWindow : Window
     private readonly System.Windows.Threading.DispatcherTimer _previewTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DateTime _previewOpenedUtc = DateTime.UtcNow;
 
-    public SettingsWindow(Settings settings, Action onSaved, Func<string, string> gameDisplay, Func<string>? detectStatus = null)
+    public SettingsWindow(Settings settings, Action onSaved, Func<string, string> gameDisplay, Func<string>? detectStatus = null, Func<string?>? lastFocus = null, Func<string, string>? classifyFocus = null, Action<string>? testPopup = null)
     {
         InitializeComponent();
         Icon = AppIcon.CreateWindowIcon();
@@ -25,6 +28,9 @@ public partial class SettingsWindow : Window
         _onSaved = onSaved;
         _gameDisplay = gameDisplay;
         _detectStatus = detectStatus;
+        _lastFocus = lastFocus;
+        _classifyFocus = classifyFocus;
+        _testPopup = testPopup;
         GeneralEnabledBox.IsChecked = _settings.GeneralEnabled;
         StartupBox.IsChecked = _settings.StartWithWindows;
         IntervalBox.Text = _settings.GeneralMinutes.ToString();
@@ -217,6 +223,51 @@ public partial class SettingsWindow : Window
     private void RefreshDetectStatus()
     {
         try { DetectStatusText.Text = _detectStatus?.Invoke() ?? "Status unavailable."; }
+        catch { }
+        try
+        {
+            var exe = _lastFocus?.Invoke();
+            ClassifyTargetText.Text = string.IsNullOrWhiteSpace(exe) ? "none yet — focus an app first" : exe;
+        }
+        catch { }
+    }
+
+    // Classify buttons (#11): target exe is shown above, receipt below. Saved
+    // immediately by App; a later Save merges the new line (MergeBoxLines).
+    private void ClassifyGames_Click(object sender, RoutedEventArgs e) => Classify("games");
+    private void ClassifyQuiet_Click(object sender, RoutedEventArgs e) => Classify("quiet");
+    private void ClassifyIgnored_Click(object sender, RoutedEventArgs e) => Classify("ignored");
+
+    private void Classify(string target)
+    {
+        try { ClassifyReceiptText.Text = _classifyFocus?.Invoke(target) ?? "Classify unavailable."; }
+        catch { }
+    }
+
+    private void TestGeneral_Click(object sender, RoutedEventArgs e) => Test("general");
+    private void TestGame_Click(object sender, RoutedEventArgs e) => Test("game");
+    private void TestConfirm_Click(object sender, RoutedEventArgs e) => Test("confirm");
+
+    private void Test(string kind)
+    {
+        try { _testPopup?.Invoke(kind); }
+        catch { }
+    }
+
+    // Beta-debug log helpers (#11): moved here from the tray so Exit stays visible.
+    private void OpenLogs_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(Settings.Dir);
+            System.Diagnostics.Process.Start("explorer.exe", Settings.Dir);
+        }
+        catch { }
+    }
+
+    private void ClearLog_Click(object sender, RoutedEventArgs e)
+    {
+        try { Logger.Clear(); }
         catch { }
     }
 

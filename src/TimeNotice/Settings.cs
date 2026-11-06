@@ -73,7 +73,12 @@ public sealed class Settings
                 s = JsonSerializer.Deserialize<Settings>(raw) ?? new Settings();
             }
             else
-                return new Settings();
+            {
+                var fresh = new Settings();
+                fresh.IgnoreExes = GameCatalog.DefaultIgnored()
+                    .Concat(GameCatalog.DefaultExtraIgnored()).ToList();
+                return fresh;
+            }
         }
         catch
         {

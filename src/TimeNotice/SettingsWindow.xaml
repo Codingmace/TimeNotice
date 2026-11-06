@@ -134,6 +134,30 @@
                     </Border>
                     <Border Style="{StaticResource Card}">
                     <StackPanel>
+                        <TextBlock Text="Classify last focus" Style="{StaticResource CardTitle}"/>
+                        <TextBlock Text="Adds the app that was focused before Settings opened. The name is shown first, so nothing is added blind." Style="{StaticResource Hint}"/>
+                        <TextBlock x:Name="ClassifyTargetText" Text="…" FontFamily="Consolas" Margin="0,0,0,8"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="To Games" Padding="10,4" Margin="0,0,8,0" Click="ClassifyGames_Click"/>
+                            <Button Content="To Quiet" Padding="10,4" Margin="0,0,8,0" Click="ClassifyQuiet_Click"/>
+                            <Button Content="To Ignored" Padding="10,4" Click="ClassifyIgnored_Click"/>
+                        </StackPanel>
+                        <TextBlock x:Name="ClassifyReceiptText" FontSize="12" Foreground="#15803D" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                    </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="Try a popup" Style="{StaticResource CardTitle}"/>
+                        <TextBlock Text="Fire a real popup through the normal gate (Quiet/Pause still silence it)." Style="{StaticResource Hint}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Test general" Padding="10,4" Margin="0,0,8,0" Click="TestGeneral_Click"/>
+                            <Button Content="Test game" Padding="10,4" Margin="0,0,8,0" Click="TestGame_Click"/>
+                            <Button Content="Test confirm" Padding="10,4" Click="TestConfirm_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}">
+                    <StackPanel>
                         <TextBlock Text="Heuristics (unknown games)" Style="{StaticResource CardTitle}"/>
                         <TextBlock Text="Finds unlisted games by fullscreen/GPU + idle. 30s dips never flap." Style="{StaticResource Hint}"/>
                         <CheckBox x:Name="HeurEnabledBox" Content="Enabled" IsChecked="True"/>
@@ -324,7 +348,11 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="VersionText" Grid.Column="0" VerticalAlignment="Center" FontSize="12" Foreground="#6B6B74"/>
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock x:Name="VersionText" VerticalAlignment="Center" FontSize="12" Foreground="#6B6B74"/>
+                <Button Content="Logs" Padding="8,2" Margin="8,0,0,0" Click="OpenLogs_Click"/>
+                <Button Content="Clear log" Padding="8,2" Margin="8,0,0,0" Click="ClearLog_Click"/>
+            </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="SaveButton" Content="Save" Width="90" Padding="10,5" Margin="0,0,8,0"
                         Background="#2563EB" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Click="Save_Click"/>

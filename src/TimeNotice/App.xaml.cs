@@ -52,7 +52,7 @@ public partial class App : System.Windows.Application
             Text = "TimeNotice"
         };
         _tray.ContextMenuStrip = new WinForms.ContextMenuStrip();
-        // Status first (refreshed on open), then act, classify, test, exit. Test items live last: they are dev tools, not daily use.
+        // Status first, then act, then exit. Everything else lives in Settings (#11).
         var statusItem = new WinForms.ToolStripMenuItem("TimeNotice") { Enabled = false };
         _tray.ContextMenuStrip.Items.Add(statusItem);
         var pauseItem = new WinForms.ToolStripMenuItem("Pause") { Checked = _settings.PauseAll, CheckOnClick = true };
@@ -63,17 +63,6 @@ public partial class App : System.Windows.Application
         };
         _tray.ContextMenuStrip.Items.Add(pauseItem);
         _tray.ContextMenuStrip.Items.Add("Settings…", null, (_, _) => OpenSettings());
-        _tray.ContextMenuStrip.Items.Add(new WinForms.ToolStripSeparator());
-        _tray.ContextMenuStrip.Items.Add("Add focused app to Games", null, (_, _) => ClassifyFocused("games"));
-        _tray.ContextMenuStrip.Items.Add("Add focused app to Quiet", null, (_, _) => ClassifyFocused("quiet"));
-        _tray.ContextMenuStrip.Items.Add("Add focused app to Ignored", null, (_, _) => ClassifyFocused("ignored"));
-        _tray.ContextMenuStrip.Items.Add(new WinForms.ToolStripSeparator());
-        _tray.ContextMenuStrip.Items.Add("Test general reminder", null, (_, _) => ShowTest("manual-general", "general"));
-        _tray.ContextMenuStrip.Items.Add("Test game reminder", null, (_, _) => ShowTest("manual-game", "game"));
-        _tray.ContextMenuStrip.Items.Add("Test confirm (Z/X)", null, (_, _) => TestConfirm());
-        _tray.ContextMenuStrip.Items.Add(new WinForms.ToolStripSeparator());
-        _tray.ContextMenuStrip.Items.Add("Open logs folder", null, (_, _) => OpenLogsFolder());
-        _tray.ContextMenuStrip.Items.Add("Clear log", null, (_, _) => Logger.Clear());
         _tray.ContextMenuStrip.Items.Add(new WinForms.ToolStripSeparator());
         _tray.ContextMenuStrip.Items.Add("Exit", null, (_, _) => Shutdown());
         _tray.ContextMenuStrip.Opening += (_, _) => RefreshTrayMenu(statusItem, pauseItem);
@@ -110,24 +99,27 @@ public partial class App : System.Windows.Application
             if (run is null) return;
             if (_settings.StartWithWindows)
             {
-                var exe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                // Prefer the runtime path (MainModule can be null); the single
+                // Run value is overwritten each launch, so a new beta exe in a
+                // new folder repoints autostart at itself — no stale duplicate.
+                var exe = Environment.ProcessPath;
+                if (string.IsNullOrWhiteSpace(exe))
+                {
+                    try { exe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName; }
+                    catch { }
+                }
                 if (!string.IsNullOrWhiteSpace(exe))
+                {
                     run.SetValue("TimeNotice", $"\"{exe}\"");
+                    Logger.Log($"src=startup run={exe}");
+                }
+                else Logger.Log("src=startup run=<unresolved>");
             }
             else
             {
                 try { run.DeleteValue("TimeNotice", throwOnMissingValue: false); } catch { }
+                Logger.Log("src=startup run=removed");
             }
-        }
-        catch { }
-    }
-
-    private void OpenLogsFolder()
-    {
-        try
-        {
-            System.IO.Directory.CreateDirectory(Settings.Dir);
-            System.Diagnostics.Process.Start("explorer.exe", Settings.Dir);
         }
         catch { }
     }
@@ -136,7 +128,7 @@ public partial class App : System.Windows.Application
     {
         if (_settingsWindow is null)
         {
-            _settingsWindow = new SettingsWindow(_settings, () => { ApplyStartup(); StartScheduler(); }, GameDisplayName, DetectionStatus);
+            _settingsWindow = new SettingsWindow(_settings, () => { ApplyStartup(); StartScheduler(); }, GameDisplayName, DetectionStatus, LastFocusExe, ClassifyLastFocus, TestPopup);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
         if (_settingsWindow.WindowState == WindowState.Minimized) _settingsWindow.WindowState = WindowState.Normal;
@@ -208,7 +200,7 @@ public partial class App : System.Windows.Application
     private bool IsIgnored(string? exe)
     {
         if (string.IsNullOrWhiteSpace(exe)) return false;
-        if (exe.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase)) return true; // never score self
+        if (NotificationPolicy.IsSelf(exe)) return true; // never score self, whatever the download was named
         foreach (var line in _settings.IgnoreExes)
             if (SameExe(ParseGameEntry(line).Exe, exe)) return true;
         return GameCatalog.IsIgnore(exe);
@@ -250,15 +242,18 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private void ClassifyFocused(string target)
+    // Last non-self focus seen by the poll. Tray/Settings clicks steal focus,
+    // so a live read at click time just says TimeNotice.exe — Settings shows
+    // this value before classifying, so the target is never a surprise (#11).
+    public string? LastFocusExe() => _lastNonSelfFg;
+
+    // Classify the last-focused app. Called from Settings, where the target
+    // exe is displayed first. Saves immediately; Settings Save merges it.
+    public string ClassifyLastFocus(string target)
     {
-        var live = NotificationPolicy.ForegroundExe();
-        // Tray menu steals focus, so live is often TimeNotice.exe itself.
-        // Fall back to the last non-self fg seen by the 5s poll.
-        var fg = (string.IsNullOrWhiteSpace(live) || live.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase))
-            && !string.IsNullOrWhiteSpace(_lastNonSelfFg) ? _lastNonSelfFg : live;
-        if (string.IsNullOrWhiteSpace(fg)) return;
-        if (fg.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase)) return; // never list self
+        var fg = _lastNonSelfFg;
+        if (string.IsNullOrWhiteSpace(fg)) return "Nothing focused yet — focus an app first.";
+        if (NotificationPolicy.IsSelf(fg)) return "That is this app — never listed.";
         if (target == "games")
         {
             if (!_settings.GameExes.Any(l => SameExe(ParseGameEntry(l).Exe, fg)))
@@ -275,7 +270,17 @@ public partial class App : System.Windows.Application
                 _settings.IgnoreExes.Add(fg);
         }
         _settings.Save();
-        Logger.Log($"src=classify fg={fg} live={live ?? "<null>"} target={target}");
+        Logger.Log($"src=classify fg={fg} target={target}");
+        return $"{fg} saved to {target}.";
+    }
+
+    // Test popups, called from the Settings Detect tab (#11). Same paths as the old tray items.
+    public void TestPopup(string kind)
+    {
+        if (_overlay is null) return;
+        if (kind.Equals("game", StringComparison.OrdinalIgnoreCase)) ShowTest("manual-game", "game");
+        else if (kind.Equals("confirm", StringComparison.OrdinalIgnoreCase)) TestConfirm();
+        else ShowTest("manual-general", "general");
     }
 
     private void CheckAuto()
@@ -283,7 +288,7 @@ public partial class App : System.Windows.Application
         var nowUtc = DateTime.UtcNow; // ponytail: interval math in UTC, DST-proof
         var nowLocal = DateTime.Now; // ponytail: time windows are local wall-clock by user intent
         var fg = NotificationPolicy.ForegroundExe();
-        if (!string.IsNullOrWhiteSpace(fg) && !fg.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(fg) && !NotificationPolicy.IsSelf(fg))
             _lastNonSelfFg = fg; // remember before menu clicks steal focus
         if (_settings.PauseAll) return;
         if (NotificationPolicy.ShouldSuppress(fg, _settings)) return; // Quiet wins over both modes, retry next tick
@@ -515,7 +520,7 @@ public partial class App : System.Windows.Application
         {
             // Last focus, not live focus (issue #9): on a single monitor opening
             // Settings always steals focus, so the live read would just say
-            // TimeNotice.exe. The cached last non-self fg is the useful line.
+            // itself. The cached last non-self fg is the useful line.
             var lastFg = _lastNonSelfFg;
             _gpu ??= new Heuristics.GpuSampler();
             string lastGpu;
@@ -584,7 +589,7 @@ public partial class App : System.Windows.Application
     // One-line reason this GPU-hot exe does or doesn't start a session.
     private string GpuVerdict(string exe, double gpu)
     {
-        if (exe.Equals("TimeNotice.exe", StringComparison.OrdinalIgnoreCase)) return "skipped: this app, never tracked";
+        if (NotificationPolicy.IsSelf(exe)) return "skipped: this app, never tracked";
         if (GameCatalog.IsIgnore(exe)) return "skipped: launcher (catalog)";
         foreach (var line in _settings.IgnoreExes)
             if (SameExe(ParseGameEntry(line).Exe, exe)) return "skipped: your Ignored list";

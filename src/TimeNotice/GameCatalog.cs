@@ -58,6 +58,21 @@ public static class GameCatalog
         });
     }
 
-    public static bool IsIgnore(string? exe) =>
-        Find(exe)?.Policy.Equals("Ignore", StringComparison.OrdinalIgnoreCase) == true;
+    public static bool IsIgnore(string? exe)
+    {
+        if (Find(exe)?.Policy.Equals("Ignore", StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+        // GPU-spiky non-game apps are ignore-never-track even on fresh configs
+        // where settings.json was never seeded (user clear still respected via
+        // Settings.IgnoreExes display; this is the runtime safety net).
+        if (string.IsNullOrWhiteSpace(exe)) return false;
+        var key = exe.Trim();
+        if (key.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) key = key[..^4];
+        return DefaultExtraIgnored().Any(x =>
+        {
+            var c = x;
+            if (c.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) c = c[..^4];
+            return string.Equals(c, key, StringComparison.OrdinalIgnoreCase);
+        });
+    }
 }
