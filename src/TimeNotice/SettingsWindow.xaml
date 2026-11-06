@@ -245,13 +245,13 @@
                         <TextBlock Text="Game wording" Style="{StaticResource CardTitle}"/>
                         <TextBlock Text="Overrides for game reminders. Blank = default game wording." Style="{StaticResource Hint}"/>
                         <CheckBox x:Name="GameNotifyBox" Content="Pop when a game is detected"/>
-                        <TextBlock Text="Game wording (blank = default game line). {game} {elapsed} work here." Style="{StaticResource FieldLabel}"/>
+                        <TextBlock Text="Game wording (blank = default game line). {game} {elapsed} {interval} {time} {next} all work here." Style="{StaticResource FieldLabel}"/>
                         <TextBox x:Name="GameMainBox" Text="You have been playing {game} for {elapsed}"/>
-                        <TextBlock Text="Game sub line (blank = default game sub)" Style="{StaticResource FieldLabel}"/>
+                        <TextBlock Text="Game sub line (blank = default game sub). Same 5 tokens." Style="{StaticResource FieldLabel}"/>
                         <TextBox x:Name="GameSubBox" Text="Next game alert in {interval} min"/>
-                        <TextBlock Text="Detection line ({game} {interval})" Style="{StaticResource FieldLabel}"/>
+                        <TextBlock Text="Detection line ({game} {interval} {time})" Style="{StaticResource FieldLabel}"/>
                         <TextBox x:Name="GameDetectTemplateBox" Text="{}{game} matched Games list"/>
-                        <TextBlock Text="Detection sub line (blank = none)" Style="{StaticResource FieldLabel}"/>
+                        <TextBlock Text="Detection sub line (blank = none). {game} {interval} {time} work here." Style="{StaticResource FieldLabel}"/>
                         <TextBox x:Name="GameDetectSubBox" Text="Alerts set to {interval} min"/>
                     </StackPanel>
                     </Border>
@@ -286,7 +286,7 @@
             <TabItem Header="Previews">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="8">
-                    <TextBlock Text="Live samples of every popup, using your current templates and theme. Read-only — the scheduler is untouched. Game elapsed counts from when Settings was opened." Style="{StaticResource Hint}"/>
+                    <TextBlock Text="Live samples of every popup, reflecting unsaved edits. Read-only — the scheduler is untouched. Game name is the first live Games line (real popup names the focused/session game); elapsed counts from when Settings was opened." Style="{StaticResource Hint}"/>
                     <TextBlock Text="1 · General reminder" Style="{StaticResource FieldLabel}"/>
                     <Border x:Name="PvGeneralBorder" CornerRadius="10" Padding="14,10" Margin="0,4,0,4" MaxWidth="320" HorizontalAlignment="Left">
                         <StackPanel>

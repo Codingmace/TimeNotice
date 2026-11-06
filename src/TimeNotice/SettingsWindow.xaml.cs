@@ -329,50 +329,77 @@ public partial class SettingsWindow : Window
         catch { }
     }
 
+    private static int LiveInt(string? text, int fallback)
+    {
+        return int.TryParse((text ?? "").Trim(), out var v) ? v : fallback;
+    }
+
     // Previews tab: live read-only samples of every popup, expanded exactly like
     // App.ShowTest/ShowDetect/ConfirmPrompt so what you see is what will fire.
+    // Reads the live boxes (unsaved edits included). Placeholders by design, kept
+    // to 3: game name (first live Games line), elapsed (counts from window open),
+    // Align anchor (real popup anchors on its last fire when still ahead).
     private void RefreshPreviews()
     {
         try
         {
             var nowLocal = DateTime.Now;
             var nowStr = nowLocal.ToString("h:mm tt");
-            var gmins = Math.Max(1, _settings.GeneralMinutes);
-            var ymins = Math.Max(1, _settings.GameMinutes);
+            var gmins = Math.Max(1, LiveInt(IntervalBox.Text, _settings.GeneralMinutes));
+            var ymins = Math.Max(1, LiveInt(GameIntervalBox.Text, _settings.GameMinutes));
+            var align = AlignBox.IsChecked == true;
+            var showSub = ShowNextBox.IsChecked == true;
             // Preview mirrors ShowTest: Align is general-only, and the shown
-            // wait is the true gap to the coming boundary (no last-fire here,
-            // so the coming boundary stands in). Game previews count from now.
-            var gNext = _settings.AlignToClock ? App.NextBoundary(nowLocal, gmins) : nowLocal.AddMinutes(gmins);
-            var gShow = _settings.AlignToClock ? Math.Max(1, (int)Math.Ceiling((gNext - nowLocal).TotalMinutes)) : gmins;
+            // wait is the true gap to the coming boundary. The real popup also
+            // anchors on its last fire when still ahead; Settings keeps no such
+            // clock, so the coming boundary stands in.
+            var gNext = align ? App.NextBoundary(nowLocal, gmins) : nowLocal.AddMinutes(gmins);
+            var gShow = align ? Math.Max(1, (int)Math.Ceiling((gNext - nowLocal).TotalMinutes)) : gmins;
             var nextStr = gNext.ToString("h:mm tt");
             var gameNext = nowLocal.AddMinutes(ymins).ToString("h:mm tt");
             var elapsed = App.FormatElapsed(DateTime.UtcNow - _previewOpenedUtc); // sample session clock
+            // Placeholder name from the live Games box; the real popup names the
+            // focused/session game, the manual test always uses Test game.
             string exe = "newgame.exe";
-            foreach (var line in _settings.GameExes)
+            foreach (var line in (GameBox.Text ?? "").Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 var text = line ?? "";
                 var eq = text.IndexOf('=');
                 var e = (eq < 0 ? text : text[..eq]).Trim();
                 if (e.Length > 0) { exe = e; break; }
             }
+            if (exe == "newgame.exe")
+            {
+                foreach (var line in _settings.GameExes)
+                {
+                    var text = line ?? "";
+                    var eq = text.IndexOf('=');
+                    var e = (eq < 0 ? text : text[..eq]).Trim();
+                    if (e.Length > 0) { exe = e; break; }
+                }
+            }
             var display = _gameDisplay(exe);
-            SetPreview(PvGeneralBorder, PvGeneralMain, PvGeneralSub,
-                (_settings.MainTemplate ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gShow.ToString()),
-                _settings.ShowSession ? (_settings.SubTemplate ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gShow.ToString()) : "");
-            var gm = string.IsNullOrWhiteSpace(_settings.GameMainTemplate) ? Settings.DefaultGameMainTemplate : _settings.GameMainTemplate;
-            var gs = string.IsNullOrWhiteSpace(_settings.GameSubTemplate) ? Settings.DefaultGameSubTemplate : _settings.GameSubTemplate;
-            SetPreview(PvGameBorder, PvGameMain, PvGameSub,
-                gm.Replace("{time}", nowStr).Replace("{next}", gameNext).Replace("{game}", display).Replace("{elapsed}", elapsed).Replace("{interval}", ymins.ToString()),
-                _settings.ShowSession ? gs.Replace("{time}", nowStr).Replace("{next}", gameNext).Replace("{game}", display).Replace("{elapsed}", elapsed).Replace("{interval}", ymins.ToString()) : "");
-            var dMain = (_settings.GameDetectTemplate ?? "").Replace("{game}", display).Replace("{interval}", ymins.ToString()).Replace("{time}", nowStr);
+            var timeout = Math.Clamp(LiveInt(ConfirmTimeoutBox.Text, _settings.ConfirmTimeoutSeconds), 5, 120);
+            var timeoutAction = SelectedTag(ConfirmActionBox);
+            if (string.IsNullOrWhiteSpace(timeoutAction)) timeoutAction = _settings.ConfirmTimeoutAction;
+            var gMain = (MainTemplateBox.Text ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gShow.ToString());
+            if (string.IsNullOrWhiteSpace(gMain)) gMain = nowStr; // real popup shows the time string, never blank
+            var gSub = showSub ? (SubTemplateBox.Text ?? "").Replace("{time}", nowStr).Replace("{next}", nextStr).Replace("{game}", "").Replace("{elapsed}", "").Replace("{interval}", gShow.ToString()) : "";
+            SetPreview(PvGeneralBorder, PvGeneralMain, PvGeneralSub, gMain, gSub);
+            var gm = string.IsNullOrWhiteSpace(GameMainBox.Text) ? Settings.DefaultGameMainTemplate : GameMainBox.Text;
+            var gs = string.IsNullOrWhiteSpace(GameSubBox.Text) ? Settings.DefaultGameSubTemplate : GameSubBox.Text;
+            var gameMain = gm.Replace("{time}", nowStr).Replace("{next}", gameNext).Replace("{game}", display).Replace("{elapsed}", elapsed).Replace("{interval}", ymins.ToString());
+            if (string.IsNullOrWhiteSpace(gameMain)) gameMain = nowStr; // same blank rule as the real popup
+            var gameSub = showSub ? gs.Replace("{time}", nowStr).Replace("{next}", gameNext).Replace("{game}", display).Replace("{elapsed}", elapsed).Replace("{interval}", ymins.ToString()) : "";
+            SetPreview(PvGameBorder, PvGameMain, PvGameSub, gameMain, gameSub);
+            var dMain = (GameDetectTemplateBox.Text ?? "").Replace("{game}", display).Replace("{interval}", ymins.ToString()).Replace("{time}", nowStr);
             if (string.IsNullOrWhiteSpace(dMain)) dMain = $"{display} detected";
             SetPreview(PvDetectBorder, PvDetectMain, PvDetectSub, dMain,
-                _settings.ShowSession ? (_settings.GameDetectSubTemplate ?? "").Replace("{game}", display).Replace("{interval}", ymins.ToString()).Replace("{time}", nowStr) : "");
+                showSub ? (GameDetectSubBox.Text ?? "").Replace("{game}", display).Replace("{interval}", ymins.ToString()).Replace("{time}", nowStr) : "");
             var cMain = $"{display} Detected";
             var cExe = display.Equals(exe, StringComparison.OrdinalIgnoreCase) ? "" : $"Process {exe}";
-            var timeout = Math.Clamp(_settings.ConfirmTimeoutSeconds, 5, 120);
             var secs = timeout; // static sample: no reason to burn a ticking countdown in a preview
-            var cSub = _settings.ConfirmTimeoutAction.Equals("Reject", StringComparison.OrdinalIgnoreCase)
+            var cSub = timeoutAction.Equals("Reject", StringComparison.OrdinalIgnoreCase)
                 ? $"Ctrl+Alt+Z — Accept\nCtrl+Alt+X — Reject (auto in {secs}s)"
                 : $"Ctrl+Alt+Z — Accept (auto in {secs}s)\nCtrl+Alt+X — Reject";
             SetPreview(PvConfirmBorder, PvConfirmMain, PvConfirmSub, cMain, cSub, cExe, PvConfirmExe);
@@ -390,8 +417,10 @@ public partial class SettingsWindow : Window
 
     private void SetPreview(System.Windows.Controls.Border border, System.Windows.Controls.TextBlock main, System.Windows.Controls.TextBlock sub, string mainText, string subText, string exeText = "", System.Windows.Controls.TextBlock? exeBlock = null)
     {
-        main.Text = string.IsNullOrWhiteSpace(mainText) ? "(blank)" : mainText;
+        main.Text = mainText; // blank mains fall back at the call site (real popup shows the time string)
         sub.Text = subText;
+        // Intentional: collapse keeps the preview card tight; the real popup sets
+        // empty text instead, which renders the same (no sub line, no hole).
         sub.Visibility = subText.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         if (exeBlock is not null)
         {

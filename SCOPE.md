@@ -17,20 +17,21 @@ Lightweight Windows tray app that reduces time blindness during gaming/focused u
 - Scheduled reminders: configurable interval (default 30 min), wall-clock time, optional session/next-reminder line, on/off outside games.
 - Hybrid detection: user mapping > known catalog > heuristic (foreground + GPU + fullscreen + idle).
 - Session timer with `IDLE -> ACTIVE -> SUSPECT_INACTIVE -> INACTIVE`.
-- Overlay: WPF Topmost, `ShowActivated=false`, `WS_EX_NOACTIVATE|TRANSPARENT`, click-through, corner/opacity in JSON, auto-fade (default ~5s).
-- Per-game policy: Normal / No Overlay / Ignore / Quiet Mode. Centralized gate runs before any overlay. Quiet Mode suppresses all popups while detected.
+- Overlay: WPF Topmost, `ShowActivated=false`, `WS_EX_NOACTIVATE|TRANSPARENT`, click-through, corner/opacity in JSON, auto-fade (default 10s).
+- Per-game policy: Normal / Ignore / Quiet Mode. Centralized gate runs before any overlay. Quiet Mode suppresses all popups while detected. (No Overlay dropped: with no database, an invisible untracked clock is unobservable, so it added nothing.)
+- Confirm prompt: unknown sustained game asks once via Ctrl+Alt+Z (track) / Ctrl+Alt+X (ignore), sticky, no focus steal; timeout applies the configured action (default Accept, 30s).
 - Settings in JSON. SQLite only if history added later (deferred).
 
 ## 4. Detection — concrete APIs only
-- Foreground: `GetForegroundWindow + GetWindowThreadProcessId`, poll 1s.
-- Idle: `GetLastInputInfo`, poll 5s.
-- Fullscreen/borderless: `GetWindowPlacement + DWM`, contextual only.
-- GPU active: PDH `GPU Engine` counters per-process, poll 5s. No NVIDIA SDK.
-- Thresholds (configurable, test-driven): SUSPECT after 30s foreground loss/idle, INACTIVE after 5 min. Sleep/resume closes session. Alt-tab = foreground loss.
+- Foreground: `GetWindowThreadProcessId`. Single 5s poll drives foreground + idle + GPU + fullscreen together.
+- Idle: `GetLastInputInfo` seconds since input.
+- Fullscreen/borderless: `GetWindowRect` vs monitor rect (±2px), contextual only. Exclusive-fullscreen no-show is accepted, no renderer hooks.
+- GPU active: PDH `GPU Engine` counters per-process. No NVIDIA SDK.
+- Thresholds (configurable, test-driven): signal loss moves Active→Suspect at once; `HeuristicSuspectSeconds` (default 30s) holds candidate dips + known-game alt-tab grace; `HeuristicInactiveMinutes` (default 5) closes to INACTIVE. Sleep/resume closes session. Alt-tab = foreground loss.
 
 ## 5. Catalog (ship 12 verified max)
 Schema: `{exe, display, policy}`. Example rule: launchers (`steam.exe`, etc.) = Ignore, never gameplay.
-- Ship small verified list only. Exact exes verified at build time.
+- Ship small verified list only. Exact exes verified at build time. 9 Entries (5 Ignore launchers + 4 Normal games) stay under the 12 max; 6 ExtraIgnored (Discord/Zoom/Teams/Slack/OBS) are a separate runtime safety net, never gameplay.
 - Multi-exe titles (DX11/DX12) listed explicitly.
 - User can add/correct/ignore/override locally from tray. Unknown exes: silent log + tray hint, never in-game popup.
 
