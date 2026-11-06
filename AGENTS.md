@@ -23,8 +23,8 @@ User is PM (no app-dev experience). Agent owns all code/docs. Explain in plain l
 
 ## Release uploads (recurring mistake — read before any `gh release`)
 - Gaming PCs have no SDK: NEVER upload `publish/TimeNotice.exe` (151KB framework-dependent launcher, won't run standalone).
-- Always publish self-contained single-file first, then upload THAT exe:
-  `dotnet publish src/TimeNotice/TimeNotice.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true -o publish/beta-X.Y`
+- Always publish self-contained single-file first, then upload THAT exe (exact command, all flags required — without IncludeNativeLibraries the exe silently depends on sibling DLLs and won't start):
+  `dotnet publish src/TimeNotice/TimeNotice.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true -o publish/beta-X.Y`
 - Verify after upload: `gh api repos/Skeeee343/TimeNotice/releases/tags/<tag> --jq '.assets[] | {name, size}'` — expect ~180MB, not ~150KB.
 - Audit before every release: `git log` since last beta + `git status` must be clean (commit first, never publish from a dirty tree), then write notes listing every included issue with its user-visible change. Mirror the beta-1.2 notes format (title line, Fixes list with (#N) tags). Verify notes rendered on the release page after editing.
 
