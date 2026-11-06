@@ -885,8 +885,9 @@ public partial class App : System.Windows.Application
         var nowLocal = DateTime.Now;
         var nowStr = nowLocal.ToString("h:mm tt");
         var nextStr = (_settings.AlignToClock ? NextBoundary(nowLocal, mins) : nowLocal.AddMinutes(mins)).ToString("h:mm tt");
-        var gameDisplay = ResolveGameDisplay(fg, isGame);
-        var elapsed = isGame && _gameSessionExe is not null ? FormatElapsed(DateTime.UtcNow - _gameSessionStart) : (isGame ? "0 min" : "");
+        var gameDisplay = source == "manual-game" ? "Test game" : ResolveGameDisplay(fg, isGame);
+        var elapsed = source == "manual-game" ? "0 min"
+            : isGame && _gameSessionExe is not null ? FormatElapsed(DateTime.UtcNow - _gameSessionStart) : (isGame ? "0 min" : "");
         var mainTpl = isGame
             ? (string.IsNullOrWhiteSpace(_settings.GameMainTemplate) ? Settings.DefaultGameMainTemplate : _settings.GameMainTemplate)
             : _settings.MainTemplate;
