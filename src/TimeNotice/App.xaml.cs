@@ -196,7 +196,7 @@ public partial class App : System.Windows.Application
     private bool _heurInitLogged;
 
     // Phase 3: self + ignore list never count as gameplay. Ignore wins
-    // over a Games entry for the same exe (SCOPE §5: launchers = Ignore).
+    // over a Games entry for the same exe (SCOPE §5: built-in Ignored wins).
     private bool IsIgnored(string? exe)
     {
         if (string.IsNullOrWhiteSpace(exe)) return false;
@@ -603,7 +603,7 @@ public partial class App : System.Windows.Application
     private string GpuVerdict(string exe, double gpu)
     {
         if (NotificationPolicy.IsSelf(exe)) return "skipped: this app, never tracked";
-        if (GameCatalog.IsIgnore(exe)) return "skipped: launcher (catalog)";
+        if (GameCatalog.IsIgnore(exe)) return "skipped: built-in Ignored list";
         foreach (var line in _settings.IgnoreExes)
             if (SameExe(ParseGameEntry(line).Exe, exe)) return "skipped: your Ignored list";
         if (_settings.QuietModeExes.Any(q => SameExe(q, exe))) return "skipped: Quiet Mode";
