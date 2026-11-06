@@ -130,6 +130,8 @@
                         <TextBlock Text="Right now" Style="{StaticResource CardTitle}"/>
                         <TextBlock Text="What the detector sees — read-only, refreshes every second while Settings is open." Style="{StaticResource Hint}"/>
                         <TextBlock x:Name="DetectStatusText" Text="…" TextWrapping="Wrap" FontFamily="Consolas"/>
+                        <Button Content="Copy debug info" Padding="10,4" Margin="0,8,0,0" HorizontalAlignment="Left" Click="CopyDebug_Click"/>
+                        <TextBlock x:Name="CopyReceiptText" FontSize="12" Foreground="#15803D" TextWrapping="Wrap" Margin="0,4,0,0"/>
                     </StackPanel>
                     </Border>
                     <Border Style="{StaticResource Card}">

@@ -537,6 +537,19 @@ public partial class App : System.Windows.Application
             }
             catch { lastGpu = "n/a"; }
             var lastLine = string.IsNullOrWhiteSpace(lastFg) ? "none yet" : $"{lastFg} (GPU {lastGpu})";
+        // Live read (issue #10): pid + title + resolve source so a game that
+        // never appears in last-focus is provable (protected handle vs alias).
+        // Meaningless while Settings is open (live=self) — Last focus stays canonical.
+        string liveLine;
+        try
+        {
+            var (liveExe, livePid, liveTitle, liveSrc) = NotificationPolicy.ForegroundDiag();
+            var shortTitle = liveTitle is null ? "" : liveTitle.Length > 40 ? liveTitle[..40] + "…" : liveTitle;
+            liveLine = string.IsNullOrWhiteSpace(liveExe)
+                ? $"unresolved (pid {livePid}, via {liveSrc}) title=\"{shortTitle}\""
+                : $"{liveExe} (pid {livePid}, via {liveSrc}) title=\"{shortTitle}\"";
+        }
+        catch { liveLine = "unavailable"; }
             string session = "none";
             if (!string.IsNullOrWhiteSpace(_gameSessionExe))
                 session = $"{GameDisplayName(_gameSessionExe)} — {FormatElapsed(DateTime.UtcNow - _gameSessionStart)}";
@@ -555,10 +568,10 @@ public partial class App : System.Windows.Application
             var fs = SameExe(liveFg, lastFg) && !string.IsNullOrWhiteSpace(lastFg)
                 ? (Heuristics.IsForegroundFullscreen() ? "yes" : "no")
                 : "n/a (not focused)";
-            var status = $"Last focus: {lastLine}\nSession: {session}\nWatch: {watch}\nIdle {idle}s | Fullscreen {fs}";
+            var status = $"Last focus: {lastLine}\nLive: {liveLine}\nSession: {session}\nWatch: {watch}\nIdle {idle}s | Fullscreen {fs}";
             var top = TopGpuSnapshot();
             if (top.Count > 0)
-                status += $"\n\nTop {TopGpuCount} GPU processes (why each does/doesn't track):\n" + string.Join("\n", top.Select(t => $"• {t.Exe} — {t.Gpu:F0}% — {GpuVerdict(t.Exe, t.Gpu)}"));
+                status += $"\n\nTop {TopGpuCount} GPU processes (why each does/doesn't track):\n" + string.Join("\n", top.Select(t => $"• {t.Exe} (pid {t.Pid}) — {t.Gpu:F0}% — {GpuVerdict(t.Exe, t.Gpu)}"));
             else if (_gpu is null || !_gpu.Available)
                 status += "\n\nTop GPU: engine counters unavailable on this machine.";
             return status;

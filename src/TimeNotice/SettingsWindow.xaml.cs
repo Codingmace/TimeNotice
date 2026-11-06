@@ -244,6 +244,19 @@ public partial class SettingsWindow : Window
         catch { }
     }
 
+    // Gaming-PC troubleshooting (issue #10): one click copies version +
+    // detector readout for paste-back. No dev tools needed on that machine.
+    private void CopyDebug_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?";
+            System.Windows.Clipboard.SetText($"TimeNotice v{ver}\n{DetectStatusText.Text}");
+            CopyReceiptText.Text = "Copied — paste it back to me.";
+        }
+        catch { CopyReceiptText.Text = "Copy failed — screenshot the text above instead."; }
+    }
+
     private void TestGeneral_Click(object sender, RoutedEventArgs e) => Test("general");
     private void TestGame_Click(object sender, RoutedEventArgs e) => Test("game");
     private void TestConfirm_Click(object sender, RoutedEventArgs e) => Test("confirm");

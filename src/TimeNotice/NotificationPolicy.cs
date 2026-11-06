@@ -61,26 +61,42 @@ public static class NotificationPolicy
             || t.Equals(OwnExeName, StringComparison.OrdinalIgnoreCase);
     }
 
-    public static string? ForegroundExe()
+    public static string? ForegroundExe() => ForegroundDiag().Exe;
+
+    // Gaming-PC troubleshooting without dev tools (issue #10): same read as
+    // ForegroundExe but with the how — pid, window title, and which fallback
+    // produced the name. Source is "module", "name", or "unresolved".
+    public static (string? Exe, uint Pid, string? Title, string Source) ForegroundDiag()
     {
         try
         {
             var hwnd = GetForegroundWindow();
-            if (hwnd == IntPtr.Zero) return null;
+            if (hwnd == IntPtr.Zero) return (null, 0, null, "unresolved");
             GetWindowThreadProcessId(hwnd, out var pid);
-            using var p = Process.GetProcessById((int)pid);
-            // MainModule throws for elevated / anti-cheat-protected games: fall
-            // back to ProcessName so focus never reads as null (stuck last-focus).
+            string? title = null;
             try
             {
-                var file = p.MainModule?.FileName;
-                if (!string.IsNullOrEmpty(file)) return Path.GetFileName(file);
+                var sb = new System.Text.StringBuilder(256);
+                title = GetWindowText(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : null;
             }
             catch { }
-            try { return p.ProcessName + ".exe"; }
-            catch { return null; }
+            try
+            {
+                using var p = Process.GetProcessById((int)pid);
+                // MainModule throws for elevated / anti-cheat-protected games: fall
+                // back to ProcessName so focus never reads as null (stuck last-focus).
+                try
+                {
+                    var file = p.MainModule?.FileName;
+                    if (!string.IsNullOrEmpty(file)) return (Path.GetFileName(file), pid, title, "module");
+                }
+                catch { }
+                try { return (p.ProcessName + ".exe", pid, title, "name"); }
+                catch { return (null, pid, title, "unresolved"); }
+            }
+            catch { return (null, pid, title, "unresolved"); }
         }
-        catch { return null; /* ponytail: silent unknown-exe, tray hint only */ }
+        catch { return (null, 0, null, "unresolved"); }
     }
 
     public static bool ShouldSuppress(string? exe, Settings s)
