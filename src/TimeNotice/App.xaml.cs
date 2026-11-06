@@ -176,7 +176,8 @@ public partial class App : System.Windows.Application
     }
 
     private DateTime _lastGeneral;
-    private DateTime _lastGame;
+    private DateTime _lastGame; // shared single clock for all game reminders (known + heuristic) by design: one popup stream, no per-game stacking
+    private DateTime _knownGoneSinceUtc; // alt-tab grace start for known-game sessions (same Suspect hold as heuristic)
     private string? _gameSessionExe;
     private string? _lastActiveGameExe; // latest tick's session exe, feeds wording when focus is elsewhere
     private DateTime _gameSessionStart;
@@ -208,11 +209,13 @@ public partial class App : System.Windows.Application
 
     // Effective game list: user mapping first, then catalog Normal entries not
     // overridden into Ignored. Unknown exes are NOT added — silent log only.
+    // Ignore wins: a user GameExes entry that is also ignored is dropped here,
+    // so IsKnownGame + gameActive + detect all read time-only for dual-listed exes.
     private List<(string Exe, string? Name)> EffectiveGames()
     {
         var list = _settings.GameExes
             .Select(ParseGameEntry)
-            .Where(g => g.Exe.Length > 0)
+            .Where(g => g.Exe.Length > 0 && !IsIgnored(g.Exe))
             .ToList();
         var have = new HashSet<string>(list.Select(g => ExeKey(g.Exe)), StringComparer.OrdinalIgnoreCase);
         foreach (var c in GameCatalog.Entries)
@@ -254,9 +257,10 @@ public partial class App : System.Windows.Application
         var fg = _lastNonSelfFg;
         if (string.IsNullOrWhiteSpace(fg)) return "Nothing focused yet — focus an app first.";
         if (NotificationPolicy.IsSelf(fg)) return "That is this app — never listed.";
-        if (target == "games") _settings.AddGameExe(fg);
-        else if (target == "quiet") _settings.AddQuietExe(fg);
-        else _settings.AddIgnoreExe(fg);
+        // Move semantics: one list owns the exe, the others drop it (no dual entries).
+        if (target == "games") { _settings.QuietModeExes.RemoveAll(q => SameExe(q, fg)); _settings.IgnoreExes.RemoveAll(l => SameExe(ParseGameEntry(l).Exe, fg)); _settings.AddGameExe(fg); _settings.Save(); }
+        else if (target == "quiet") { _settings.GameExes.RemoveAll(l => SameExe(ParseGameEntry(l).Exe, fg)); _settings.IgnoreExes.RemoveAll(l => SameExe(ParseGameEntry(l).Exe, fg)); _settings.AddQuietExe(fg); _settings.Save(); }
+        else { _settings.GameExes.RemoveAll(l => SameExe(ParseGameEntry(l).Exe, fg)); _settings.QuietModeExes.RemoveAll(q => SameExe(q, fg)); _settings.AddIgnoreExe(fg); _settings.Save(); }
         Logger.Log($"src=classify fg={fg} target={target}");
         return $"{fg} saved to {target}.";
     }
@@ -277,7 +281,7 @@ public partial class App : System.Windows.Application
         var fg = NotificationPolicy.ForegroundExe();
         if (!string.IsNullOrWhiteSpace(fg) && !NotificationPolicy.IsSelf(fg))
             _lastNonSelfFg = fg; // remember before menu clicks steal focus
-        if (_settings.PauseAll) return;
+        if (_settings.PauseAll) { _lastGeneral = nowUtc; _lastGame = nowUtc; return; } // freeze clocks while paused: unpause resumes the full interval, no overdue burst
         if (NotificationPolicy.ShouldSuppress(fg, _settings)) return; // Quiet wins over both modes, retry next tick
         NoteUnknown(fg); // Phase 3: silent log + tray hint, never a popup
         if (IsIgnored(fg)) fg = null; // ignored + self never hold focus for sessions
@@ -313,6 +317,7 @@ public partial class App : System.Windows.Application
             _lastActiveGameExe = active; // feeds ShowTest wording when focus is elsewhere
             if (active is not null)
             {
+                _knownGoneSinceUtc = default; // focus back: grace cancelled
                 if (!SameExe(_gameSessionExe, active) || _gameSessionStart != activeStart)
                 {
                     _gameSessionExe = active; // new session: overdue fires on next due tick
@@ -327,7 +332,23 @@ public partial class App : System.Windows.Application
             }
             else
             {
-                _gameSessionExe = null; // no focused game: keep detect memory, drop session
+                // Known-game alt-tab grace (same hold as heuristic Suspect): brief focus
+                // loss keeps the session clock, only a sustained absence drops it.
+                if (_gameSessionExe is not null && IsKnownGame(_gameSessionExe))
+                {
+                    if (_knownGoneSinceUtc == default) _knownGoneSinceUtc = nowUtc;
+                    if ((nowUtc - _knownGoneSinceUtc).TotalSeconds > Math.Max(5, _settings.HeuristicSuspectSeconds))
+                    {
+                        _knownGoneSinceUtc = default;
+                        _gameSessionExe = null; // grace expired: drop session, keep detect memory
+                    }
+                    // inside grace: keep the session clock, fall through to general + heuristic
+                }
+                else
+                {
+                    _knownGoneSinceUtc = default;
+                    _gameSessionExe = null; // no focused game: keep detect memory, drop session
+                }
             }
         }
         if (_settings.GeneralEnabled && InWindow(nowLocal) && IsGeneralDue(nowUtc, nowLocal, _lastGeneral, Math.Max(1, _settings.GeneralMinutes)))
@@ -341,6 +362,7 @@ public partial class App : System.Windows.Application
     private bool IsKnownGame(string? exe)
     {
         if (string.IsNullOrWhiteSpace(exe)) return false;
+        if (IsIgnored(exe)) return false; // ignore wins: dual-listed reads as time-only
         foreach (var g in EffectiveGames())
             if (SameExe(g.Exe, exe)) return true;
         return false;
@@ -667,6 +689,10 @@ public partial class App : System.Windows.Application
         ShowOrQueue(main, sub, "auto-detect");
     }
 
+    // Single-slot queue, latest wins: a popup shown while the overlay is busy
+    // replaces any waiting one, so a triple-fire shows at most the last queued
+    // popup after the gap. Middle popups are dropped by design (logged) — the
+    // queue never grows, one slot is the whole backlog.
     private const double QueueGapSeconds = 1.5; // ponytail: single-slot queue, latest replaces waiting
     private string? _queuedMain;
     private string? _queuedSub;
@@ -676,6 +702,9 @@ public partial class App : System.Windows.Application
     private void ShowOrQueue(string main, string sub, string source)
     {
         if (_overlay is null) return;
+        // Central gate (SCOPE §5+§8): Quiet/Pause re-checked at show time, so
+        // receipts, drains, and any future caller stay silent when the fg changed mid-flight.
+        if (NotificationPolicy.ShouldSuppress(NotificationPolicy.ForegroundExe(), _settings)) { Logger.Log($"src=suppressed-at-show orig={source} pause={_settings.PauseAll}"); return; }
         if (_confirm is { Active: true })
         {
             // A confirm owns the overlay: scheduler ticks must not queue behind the sticky prompt
@@ -714,6 +743,7 @@ public partial class App : System.Windows.Application
         var source = _queuedSource;
         _queuedMain = null;
         _queuedSub = null;
+        if (NotificationPolicy.ShouldSuppress(NotificationPolicy.ForegroundExe(), _settings)) { Logger.Log($"src=queued-dropped orig={source} pause={_settings.PauseAll}"); return; } // Quiet/Pause entered during the gap: drop, don't show
         Logger.Log($"src=queued-shown orig={source}");
         _overlay?.ShowReminder(main, sub);
     }
@@ -820,6 +850,7 @@ public partial class App : System.Windows.Application
     {
         if (_overlay is null) return;
         if (_confirm is { Active: true }) return; // one prompt at a time
+        if (NotificationPolicy.ShouldSuppress(NotificationPolicy.ForegroundExe(), _settings)) return; // same gate as ShowTest: paused/Quiet test stays silent
         const string fg = "test-game.exe"; // fake exe: receipt reads as a test, can never collide with a real game
         ClearQueue();
         _confirm = new ConfirmPrompt(_overlay, _settings, fg, "Test game", OnTestConfirmDone, persist: false);
@@ -831,6 +862,7 @@ public partial class App : System.Windows.Application
         try { _confirm?.Dispose(); } catch { }
         _confirm = null;
         try { _drainTimer?.Stop(); } catch { }
+        if (NotificationPolicy.ShouldSuppress(NotificationPolicy.ForegroundExe(), _settings)) { Logger.Log("src=suppressed-at-show orig=confirm-test-done"); return; } // Quiet/Pause entered during confirm: no receipt
         ShowOrQueue("Test popup — nothing saved.", "Games and Ignored lists unchanged.", "confirm-test-done");
     }
 
@@ -849,12 +881,14 @@ public partial class App : System.Windows.Application
         var timeoutAccepts = _settings.ConfirmTimeoutAction.Equals("Accept", StringComparison.OrdinalIgnoreCase);
         var accepted = choice.StartsWith("accept-key", StringComparison.OrdinalIgnoreCase)
             || (choice.StartsWith("timeout", StringComparison.OrdinalIgnoreCase) && timeoutAccepts);
-        if (accepted) _detectSeen.Add(exe); // just approved: skip the follow-up "matched" pop for this game
+        if (accepted) { _detectSeen.Add(exe); if (_settings.IgnoreExes.RemoveAll(l => SameExe(ParseGameEntry(l).Exe, exe)) > 0) _settings.Save(); } // move semantics: Games owns it now
+        else if (_settings.GameExes.RemoveAll(l => SameExe(ParseGameEntry(l).Exe, exe)) > 0) _settings.Save(); // move semantics: Ignored owns it now
         var display = GameDisplayName(exe);
         var main = accepted
             ? $"{display} added to Games list."
             : $"{display} is ignored.";
         var sub = accepted ? $"Current time alert interval is {Math.Max(1, _settings.GameMinutes)} min." : "No time alerts while on the ignored list.";
+        if (NotificationPolicy.ShouldSuppress(NotificationPolicy.ForegroundExe(), _settings)) { Logger.Log("src=suppressed-at-show orig=confirm-done"); return; } // Quiet/Pause entered during confirm: no receipt
         ShowOrQueue(main, sub, "confirm-done");
     }
 
@@ -964,6 +998,7 @@ public partial class App : System.Windows.Application
             {
                 Logger.Log($"src=power mode={e.Mode} sessions-closed");
                 _gameSessionExe = null; // SCOPE §4: sleep/resume closes the session
+                _detectSeen.Clear(); // resume re-fires detect for the still-running game
                 HeurReset("power");
             });
         }
