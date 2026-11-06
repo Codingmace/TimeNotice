@@ -6,7 +6,8 @@ Update this file every session. One row per test run.
 - Phase: 6 — DONE 2026-11-01 (hardening verified: clean install + corrupt recovery live-tested, Defender scan clean per user)
 - Next action: V1 exit checklist sweep (§11) or public release prep
 - Open (deferred to post-Phase 6): CountWhenRunning ON-path self-test (tick box, alt-tab 2 min); Game-tab crowding polish; repo public release; game+general overlap — both fire by design (late-night time awareness), reconsider game-with-time-only after user testing/feedback; beta debug options in-app (tray Open-logs-folder + Copy-debug-info, startup ver/OS/settings line in debug.log) — docs-only for now, see README Beta debugging
-- Open (filed 2026-11-04): #5 Test confirm popup writes minecraft.exe to Games list — fixed in code 2026-11-04, noted on issue as planned for beta 1.2 (releases currently at beta 1.1)
+- Open (filed 2026-11-04): #5 Test confirm popup writes minecraft.exe to Games list — fixed in code 2026-11-04, shipped beta 1.2 2026-11-05
+- Shipped 2026-11-05: beta 1.2 (v1.2.0, commit 034f101) prerelease + exe; closed #1, #2, #3, #4, #5, #6, #9; beta-1.1 notes marked superseded
 - Repo: public since 2026-11-02
 - Config: reset to fresh-install defaults 2026-11-01 at user request
 
