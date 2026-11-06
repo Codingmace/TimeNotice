@@ -105,6 +105,7 @@ with no database, an invisible untracked clock is unobservable, so it added noth
 | 2026-11-06 | Windows | Filed #14: separate text opacity + box-off toggle (Opacity 20-100% shared; want text slider + box 0%/off) | Issue open, no code yet — pending owner approval before Popup tab change |
 | 2026-11-06 | Windows | Fixed #16 (Settings stale while open): live append-only list sync on 1s timer (no dirty-mark, deletes respected) + post-save box reload from _settings + Quiet merge like Games/Ignore; filed #16, build 0 warn 0 err | Fix built, pending user gate test (open Settings, trigger detect, entry appears; Save shows merged lines), slated beta 1.4 with #15 |
 | 2026-11-06 | Windows | Filed #15 + fixed Test-game uses first real entry: ShowTest manual-game forces Test game + 0 min (App.xaml.cs:888-890); Test-confirm already dry-run (persist:false); previews keep real name as samples, auto paths untouched; build 0 warn 0 err | Fixed, pending user gate test + push |
+| 2026-11-06 | Windows | Filed #17: move Try a popup from Detect to Popup tab (tray → Detect via #11/281af22, now misplaced; Previews stays read-only) | Issue open, no code yet — pending owner approval before XAML-only move |
 
 ## Ponytail debt (audit 2026-10-21, biggest first)
 - [ ] `Settings.cs`: delete `ReminderMinutes + Position` until a Phase 2 reader exists
