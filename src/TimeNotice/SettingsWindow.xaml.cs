@@ -14,6 +14,8 @@ public partial class SettingsWindow : Window
     private readonly Action<string>? _testPopup; // App's test-popup path: general / game / confirm
     private readonly HashSet<string> _openedGames; // entries present when the window opened (confirm adds merge around these)
     private readonly HashSet<string> _openedIgnore;
+    private readonly HashSet<string> _openedQuiet; // same merge rule as games/ignore: classify-to-quiet while open must survive Save
+    private bool _syncing; // programmatic box refresh (live sync / post-save) must not mark the form dirty
     private bool _dirty; // any control edited since open or last save
     private bool _explicitCancel; // Cancel button means discard: skip the unsaved-changes prompt
     private readonly System.Windows.Threading.DispatcherTimer _previewTimer = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -70,6 +72,7 @@ public partial class SettingsWindow : Window
         SelectTag(ConfirmActionBox, _settings.ConfirmTimeoutAction, "Accept");
         _openedGames = new HashSet<string>(_settings.GameExes.Select(Settings.ExeKey), StringComparer.OrdinalIgnoreCase);
         _openedIgnore = new HashSet<string>(_settings.IgnoreExes.Select(Settings.ExeKey), StringComparer.OrdinalIgnoreCase);
+        _openedQuiet = new HashSet<string>(_settings.QuietModeExes.Select(Settings.ExeKey), StringComparer.OrdinalIgnoreCase);
         OpacitySlider.Value = Math.Clamp(_settings.Opacity * 100, 20, 100);
         OpacityLabel.Text = $"{(int)OpacitySlider.Value}%";
         OpacitySlider.ValueChanged += (_, e) => { OpacityLabel.Text = $"{(int)e.NewValue}%"; };
@@ -95,6 +98,7 @@ public partial class SettingsWindow : Window
         RefreshDetectStatus(); // Detect tab: what the detector sees right now
         _previewTimer.Tick += (_, _) => RefreshPreviews();
         _previewTimer.Tick += (_, _) => RefreshDetectStatus();
+        _previewTimer.Tick += (_, _) => SyncListBoxesFromLive();
         _previewTimer.Start();
         // Dirty tracking attaches last so initialization never marks the form edited.
         foreach (var box in new System.Windows.Controls.TextBox[] { IntervalBox, WindowStartBox, WindowEndBox, GameIntervalBox, GameBox, IgnoreBox, GameWindowStartBox, GameWindowEndBox, DisplayBox, MainTemplateBox, SubTemplateBox, GameMainBox, GameSubBox, GameDetectTemplateBox, GameDetectSubBox, QuietBox, BgBox, TextColorBox, SubColorBox, ConfirmTimeoutBox, HeurStartBox, HeurSuspectBox, HeurInactiveBox, HeurGpuBox })
@@ -114,6 +118,7 @@ public partial class SettingsWindow : Window
 
     private void MarkDirty()
     {
+        if (_syncing) return; // live sync / post-save refresh is not a user edit
         _dirty = true;
         ErrorText.Text = "";
         UpdateSaveState();
@@ -230,6 +235,40 @@ public partial class SettingsWindow : Window
             ClassifyTargetText.Text = string.IsNullOrWhiteSpace(exe) ? "none yet — focus an app first" : exe;
         }
         catch { }
+    }
+
+    // Live list sync: entries added elsewhere while open (confirm prompt,
+    // Detect-tab classify) appear in the boxes within a second. Append-only:
+    // lines the user deleted stay deleted (box wins), user edits untouched.
+    private void SyncListBoxesFromLive()
+    {
+        try
+        {
+            _syncing = true;
+            AppendMissing(GameBox, _settings.GameExes, _openedGames);
+            AppendMissing(IgnoreBox, _settings.IgnoreExes, _openedIgnore);
+            AppendMissing(QuietBox, _settings.QuietModeExes, _openedQuiet);
+        }
+        catch { }
+        finally { _syncing = false; }
+    }
+
+    private static void AppendMissing(System.Windows.Controls.TextBox box, List<string> live, HashSet<string> opened)
+    {
+        var boxKeys = new HashSet<string>(
+            box.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(Settings.ExeKey),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var e in live)
+        {
+            var k = Settings.ExeKey(e);
+            if (!opened.Contains(k) && !boxKeys.Contains(k))
+            {
+                if (box.Text.Length > 0 && !box.Text.EndsWith("\n")) box.AppendText("\n");
+                box.AppendText(e.Trim());
+                boxKeys.Add(k);
+                opened.Add(k); // seen now: a later user delete is respected by MergeBoxLines
+            }
+        }
     }
 
     // Classify buttons (#11): target exe is shown above, receipt below. Saved
@@ -533,8 +572,7 @@ public partial class SettingsWindow : Window
         _settings.CustomText = TextColorBox.Text.Trim();
         _settings.CustomSubText = SubColorBox.Text.Trim();
         _settings.Opacity = Math.Clamp(OpacitySlider.Value / 100.0, 0.2, 1.0);
-        _settings.QuietModeExes = QuietBox.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+        _settings.QuietModeExes = MergeBoxLines(QuietBox.Text, _settings.QuietModeExes, _openedQuiet);
         _settings.ConfirmTimeoutSeconds = confirmSecs;
         _settings.ConfirmTimeoutAction = confirmAction;
         _settings.Normalize(); // clamp, sanitize, dedupe after every save
@@ -544,12 +582,23 @@ public partial class SettingsWindow : Window
         UpdateSaveState();
         ErrorText.Foreground = System.Windows.Media.Brushes.Green;
         ErrorText.Text = $"Saved {DateTime.Now:h:mm:ss tt}.";
-        // Stay open: the window is a workspace, not a dialog. Re-snapshot the
-        // merge baseline so a second save treats the first save's lines as home.
+        // Stay open: the window is a workspace, not a dialog. Show exactly what
+        // was saved (merge + Normalize may have added/cleaned lines) and
+        // re-snapshot the merge baseline so a second save treats these as home.
+        try
+        {
+            _syncing = true;
+            GameBox.Text = string.Join("\n", _settings.GameExes);
+            IgnoreBox.Text = string.Join("\n", _settings.IgnoreExes);
+            QuietBox.Text = string.Join("\n", _settings.QuietModeExes);
+        }
+        finally { _syncing = false; }
         _openedGames.Clear();
         foreach (var k in _settings.GameExes.Select(Settings.ExeKey)) _openedGames.Add(k);
         _openedIgnore.Clear();
         foreach (var k in _settings.IgnoreExes.Select(Settings.ExeKey)) _openedIgnore.Add(k);
+        _openedQuiet.Clear();
+        foreach (var k in _settings.QuietModeExes.Select(Settings.ExeKey)) _openedQuiet.Add(k);
     }
 
     // Box lines win, except entries added elsewhere while the window was open
