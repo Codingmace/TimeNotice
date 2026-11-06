@@ -108,10 +108,16 @@ public partial class OverlayWindow : Window
         TimeText.Foreground = new System.Windows.Media.SolidColorBrush(ParseColor(fg, "#FFFFFFFF"));
         SubText.Foreground = new System.Windows.Media.SolidColorBrush(ParseColor(sub, "#FFBBBBBB"));
         ExeText.Foreground = SubText.Foreground;
-        var op = _settings.Opacity;
-        if (op < 0.2) op = 0.2;
-        if (op > 1.0) op = 1.0;
-        Opacity = op;
+        // Box and text fade on their own: window stays opaque so the fade-out
+        // animation still has full range. Box off = transparent background.
+        Opacity = 1.0;
+        if (!_settings.ShowBox)
+            PopupBorder.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Transparent);
+        PopupBorder.Opacity = _settings.ShowBox ? Math.Clamp(_settings.Opacity, 0.2, 1.0) : 1.0;
+        var top = Math.Clamp(_settings.TextOpacity, 0.2, 1.0);
+        TimeText.Opacity = top;
+        SubText.Opacity = top;
+        ExeText.Opacity = top;
     }
 
     internal static System.Windows.Media.Color ParseColor(string? text, string fallback)

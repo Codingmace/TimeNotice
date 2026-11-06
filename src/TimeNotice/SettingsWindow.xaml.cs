@@ -76,6 +76,10 @@ public partial class SettingsWindow : Window
         OpacitySlider.Value = Math.Clamp(_settings.Opacity * 100, 20, 100);
         OpacityLabel.Text = $"{(int)OpacitySlider.Value}%";
         OpacitySlider.ValueChanged += (_, e) => { OpacityLabel.Text = $"{(int)e.NewValue}%"; };
+        ShowBoxBox.IsChecked = _settings.ShowBox;
+        TextOpacitySlider.Value = Math.Clamp(_settings.TextOpacity * 100, 20, 100);
+        TextOpacityLabel.Text = $"{(int)TextOpacitySlider.Value}%";
+        TextOpacitySlider.ValueChanged += (_, e) => { TextOpacityLabel.Text = $"{(int)e.NewValue}%"; };
         ThemeBox.SelectionChanged += (_, _) => { CustomColorPanel.Visibility = SelectedTag(ThemeBox) == "Custom" ? Visibility.Visible : Visibility.Collapsed; };
         CustomColorPanel.Visibility = SelectedTag(ThemeBox) == "Custom" ? Visibility.Visible : Visibility.Collapsed;
         IntervalBox.TextChanged += (_, _) => UpdateWarning();
@@ -103,7 +107,7 @@ public partial class SettingsWindow : Window
         // Dirty tracking attaches last so initialization never marks the form edited.
         foreach (var box in new System.Windows.Controls.TextBox[] { IntervalBox, WindowStartBox, WindowEndBox, GameIntervalBox, GameBox, IgnoreBox, GameWindowStartBox, GameWindowEndBox, DisplayBox, MainTemplateBox, SubTemplateBox, GameMainBox, GameSubBox, GameDetectTemplateBox, GameDetectSubBox, QuietBox, BgBox, TextColorBox, SubColorBox, ConfirmTimeoutBox, HeurStartBox, HeurSuspectBox, HeurInactiveBox, HeurGpuBox })
             box.TextChanged += (_, _) => MarkDirty();
-        foreach (var chk in new System.Windows.Controls.CheckBox[] { GeneralEnabledBox, StartupBox, WindowOnlyBox, GameEnabledBox, CountBox, GameWindowOnlyBox, ShowNextBox, GameNotifyBox, HeurEnabledBox, AlignBox })
+        foreach (var chk in new System.Windows.Controls.CheckBox[] { GeneralEnabledBox, StartupBox, WindowOnlyBox, GameEnabledBox, CountBox, GameWindowOnlyBox, ShowNextBox, GameNotifyBox, HeurEnabledBox, AlignBox, ShowBoxBox })
         {
             chk.Checked += (_, _) => MarkDirty();
             chk.Unchecked += (_, _) => MarkDirty();
@@ -112,6 +116,7 @@ public partial class SettingsWindow : Window
         ThemeBox.SelectionChanged += (_, _) => MarkDirty();
         ConfirmActionBox.SelectionChanged += (_, _) => MarkDirty();
         OpacitySlider.ValueChanged += (_, _) => MarkDirty();
+        TextOpacitySlider.ValueChanged += (_, _) => MarkDirty();
         UpdateSaveState(); // fresh open = no pending edits, Save dimmed
         Closing += OnClosing;
     }
@@ -397,9 +402,19 @@ public partial class SettingsWindow : Window
         main.Foreground = new System.Windows.Media.SolidColorBrush(OverlayWindow.ParseColor(tfg, "#FFFFFFFF"));
         sub.Foreground = new System.Windows.Media.SolidColorBrush(OverlayWindow.ParseColor(tsg, "#FFBBBBBB"));
         if (exeBlock is not null) exeBlock.Foreground = sub.Foreground;
-        var opLive = OpacitySlider.Value / 100.0;
-        if (opLive <= 0) opLive = _settings.Opacity;
-        border.Opacity = Math.Clamp(opLive, 0.2, 1.0);
+        // Preview reads the live sliders so box/text fade separately, like the real popup.
+        var boxOp = OpacitySlider.Value / 100.0;
+        if (boxOp <= 0) boxOp = _settings.Opacity;
+        var boxOff = ShowBoxBox.IsChecked == false;
+        if (boxOff)
+            border.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Transparent);
+        border.Opacity = boxOff ? 1.0 : Math.Clamp(boxOp, 0.2, 1.0);
+        var textOp = TextOpacitySlider.Value / 100.0;
+        if (textOp <= 0) textOp = _settings.TextOpacity;
+        textOp = Math.Clamp(textOp, 0.2, 1.0);
+        main.Opacity = textOp;
+        sub.Opacity = textOp;
+        if (exeBlock is not null) exeBlock.Opacity = textOp;
     }
 
     private void PickBg_Click(object sender, RoutedEventArgs e) => PickIntoBox(BgBox);
@@ -572,6 +587,8 @@ public partial class SettingsWindow : Window
         _settings.CustomText = TextColorBox.Text.Trim();
         _settings.CustomSubText = SubColorBox.Text.Trim();
         _settings.Opacity = Math.Clamp(OpacitySlider.Value / 100.0, 0.2, 1.0);
+        _settings.ShowBox = ShowBoxBox.IsChecked == true;
+        _settings.TextOpacity = Math.Clamp(TextOpacitySlider.Value / 100.0, 0.2, 1.0);
         _settings.QuietModeExes = MergeBoxLines(QuietBox.Text, _settings.QuietModeExes, _openedQuiet);
         _settings.ConfirmTimeoutSeconds = confirmSecs;
         _settings.ConfirmTimeoutAction = confirmAction;

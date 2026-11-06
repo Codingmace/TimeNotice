@@ -24,7 +24,9 @@ public sealed class Settings
     public string MainTemplate { get; set; } = "It is now {time}"; // ponytail: {time} {next} {interval} tokens, preview in Settings window
     public string SubTemplate { get; set; } = "Next time alert in {interval} min";
     public string Position { get; set; } = "BottomRight"; // ponytail: 4 corners only, free-form drag later if asked
-    public double Opacity { get; set; } = 0.92;
+    public double Opacity { get; set; } = 0.92; // box background only; text uses TextOpacity
+    public double TextOpacity { get; set; } = 1.0; // main/sub/exe text, 0.2-1.0
+    public bool ShowBox { get; set; } = true; // false = transparent background, text floats alone
     public string ThemeMode { get; set; } = "Dark"; // Dark | Light | MatchHost | Custom
     public string CustomBackground { get; set; } = "#CC1E1E1E"; // ponytail: hex #RRGGBB or #AARRGGBB, color picker later if asked
     public string CustomText { get; set; } = "#FFFFFFFF";
@@ -110,6 +112,8 @@ public sealed class Settings
         if (!validThemes.Contains(s.ThemeMode ?? "")) s.ThemeMode = "Dark";
         if (s.Opacity < 0.2) s.Opacity = 0.2;
         if (s.Opacity > 1.0) s.Opacity = 1.0;
+        if (s.TextOpacity < 0.2) s.TextOpacity = 0.2;
+        if (s.TextOpacity > 1.0) s.TextOpacity = 1.0;
         if (string.IsNullOrWhiteSpace(s.CustomBackground)) s.CustomBackground = "#CC1E1E1E";
         if (string.IsNullOrWhiteSpace(s.CustomText)) s.CustomText = "#FFFFFFFF";
         if (string.IsNullOrWhiteSpace(s.CustomSubText)) s.CustomSubText = "#FFBBBBBB";
@@ -148,6 +152,8 @@ public sealed class Settings
         if (!IsColorLike(CustomBackground)) CustomBackground = "#CC1E1E1E";
         if (!IsColorLike(CustomText)) CustomText = "#FFFFFFFF";
         if (!IsColorLike(CustomSubText)) CustomSubText = "#FFBBBBBB";
+        if (TextOpacity < 0.2) TextOpacity = 0.2;
+        if (TextOpacity > 1.0) TextOpacity = 1.0;
         if (string.IsNullOrWhiteSpace(GameMainTemplate)) GameMainTemplate = DefaultGameMainTemplate; // game never falls back to general wording
         if (string.IsNullOrWhiteSpace(GameSubTemplate)) GameSubTemplate = DefaultGameSubTemplate;
         GameExes = NormalizeExeList(GameExes);

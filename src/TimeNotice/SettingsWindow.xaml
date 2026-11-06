@@ -149,17 +149,6 @@
                     </Border>
                     <Border Style="{StaticResource Card}">
                     <StackPanel>
-                        <TextBlock Text="Try a popup" Style="{StaticResource CardTitle}"/>
-                        <TextBlock Text="Fire a real popup through the normal gate (Quiet/Pause still silence it)." Style="{StaticResource Hint}"/>
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="Test general" Padding="10,4" Margin="0,0,8,0" Click="TestGeneral_Click"/>
-                            <Button Content="Test game" Padding="10,4" Margin="0,0,8,0" Click="TestGame_Click"/>
-                            <Button Content="Test confirm" Padding="10,4" Click="TestConfirm_Click"/>
-                        </StackPanel>
-                    </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}">
-                    <StackPanel>
                         <TextBlock Text="Heuristics (unknown games)" Style="{StaticResource CardTitle}"/>
                         <TextBlock Text="Finds unlisted games by fullscreen/GPU + idle. 30s dips never flap." Style="{StaticResource Hint}"/>
                         <CheckBox x:Name="HeurEnabledBox" Content="Enabled" IsChecked="True"/>
@@ -230,9 +219,16 @@
                             </StackPanel>
                         </StackPanel>
                         <TextBlock Text="Popup opacity" Style="{StaticResource FieldLabel}"/>
+                        <CheckBox x:Name="ShowBoxBox" Content="Show box background (off = text floats alone)" IsChecked="True"/>
+                        <TextBlock Text="Box opacity" Style="{StaticResource FieldLabel}"/>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Slider x:Name="OpacitySlider" Minimum="20" Maximum="100" Width="220" Margin="0,4,8,4" TickFrequency="5" IsSnapToTickEnabled="True"/>
                             <TextBlock x:Name="OpacityLabel" Text="92%" VerticalAlignment="Center" FontSize="12" Foreground="#3A3A42"/>
+                        </StackPanel>
+                        <TextBlock Text="Text opacity" Style="{StaticResource FieldLabel}"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Slider x:Name="TextOpacitySlider" Minimum="20" Maximum="100" Width="220" Margin="0,4,8,4" TickFrequency="5" IsSnapToTickEnabled="True"/>
+                            <TextBlock x:Name="TextOpacityLabel" Text="100%" VerticalAlignment="Center" FontSize="12" Foreground="#3A3A42"/>
                         </StackPanel>
                         <Expander Header="Live preview" IsExpanded="False" Margin="0,8,0,0">
                             <Border x:Name="PvInlineBorder" CornerRadius="10" Padding="14,10" Margin="0,4,0,0" MaxWidth="320" HorizontalAlignment="Left">
@@ -270,6 +266,17 @@
                             <ComboBoxItem Content="Accept — track the game" Tag="Accept"/>
                             <ComboBoxItem Content="Reject — ignore it" Tag="Reject"/>
                         </ComboBox>
+                    </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="Try a popup" Style="{StaticResource CardTitle}"/>
+                        <TextBlock Text="Fire a real popup through the normal gate (Quiet/Pause still silence it)." Style="{StaticResource Hint}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Test general" Padding="10,4" Margin="0,0,8,0" Click="TestGeneral_Click"/>
+                            <Button Content="Test game" Padding="10,4" Margin="0,0,8,0" Click="TestGame_Click"/>
+                            <Button Content="Test confirm" Padding="10,4" Click="TestConfirm_Click"/>
+                        </StackPanel>
                     </StackPanel>
                     </Border>
                 </StackPanel>
