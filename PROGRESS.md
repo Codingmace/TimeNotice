@@ -7,6 +7,9 @@ Update this file every session. One row per test run.
 - Next action: V1 exit checklist sweep (§11) or public release prep
 - Open (deferred to post-Phase 6): CountWhenRunning ON-path self-test (tick box, alt-tab 2 min); Game-tab crowding polish; repo public release; game+general overlap — both fire by design (late-night time awareness), reconsider game-with-time-only after user testing/feedback; beta debug options in-app (tray Open-logs-folder + Copy-debug-info, startup ver/OS/settings line in debug.log) — docs-only for now, see README Beta debugging
 - Open (filed 2026-11-04): #5 Test confirm popup writes minecraft.exe to Games list — fixed in code 2026-11-04, shipped beta 1.2 2026-11-05
+- Open (filed 2026-11-06): #11 tray menu too long, Exit cut off after beta 1.2 added Open-logs + Clear-log rows (App.xaml.cs:56-78, 12 rows -> 16) — keep/cut audit in issue, fix pending owner keep-list decision
+- Open (filed 2026-11-06): #12 renamed self binary (e.g. TimeNotice (1).exe) leaks into Detect readout — 4 hardcoded TimeNotice.exe checks (App.xaml.cs:211,258,261,286,587) miss renames; plan: central IsSelf() on dynamic process path+name, fix pending
+- Open (filed 2026-11-06): #13 Start-with-Windows Run entry across beta exe swaps — self-heals on new-exe launch (ApplyStartup overwrites one Run value), stale only if mutex blocks new exe or old path deleted; plan: robust path resolve + startup run= log line + upgrade note, fix pending
 - Shipped 2026-11-05: beta 1.2 (v1.2.0, commit 034f101) prerelease + exe; closed #1, #2, #3, #4, #5, #6, #9; beta-1.1 notes marked superseded
 - Repo: public since 2026-11-02
 - Config: reset to fresh-install defaults 2026-11-01 at user request
@@ -89,6 +92,7 @@ with no database, an invisible untracked clock is unobservable, so it added noth
 | 2026-11-01 | Windows | P6 gates: wiped %AppData%/TimeNotice → fresh launch OK (PID 8900, dir + debug.log recreated, silent unknown-exe); garbage settings.json → corrupt backup + defaults, app alive (PID 12552); Defender clean per user; restored pre-P6 files, relaunched | P6 DONE |
 | 2026-11-02 | Windows | Heuristic dip-grace (SuspectSeconds hold, cand-drop log) + sampler refresh-on-new-pid + null-on-no-match; Save stays open (merge baseline re-snapshot); Settings Topmost-pulse to front; build 0 warn 0 err | Pending user pull + Dota retest on gaming PC |
 | 2026-11-04 | Windows | Filed #5: tray Test confirm timeout-accept persisted minecraft.exe to GameExes (App.xaml.cs:691 demo fg + ConfirmPrompt.cs:120 AddGameExe via prod OnConfirmDone); AGENTS.md now requires GitHub issue + PROGRESS row for every feature/bug | Issue open; workaround = delete minecraft.exe line from settings.json GameExes; fix pending |
+| 2026-11-05 | Windows | Filed #10: last-focus stuck on explorer.exe (ForegroundExe MainModule throws on protected games, returned null) + Discord discovered on fresh install (DefaultExtraIgnored never seeded fresh, IsIgnore ignored it). Fixed: ProcessName fallback in NotificationPolicy.cs, IsIgnore covers Extra in GameCatalog.cs, fresh Settings seeds IgnoreExes; build 0 warn 0 err | Fix built, pending user retest: Rivals focus + Discord silent |
 
 ## Ponytail debt (audit 2026-10-21, biggest first)
 - [ ] `Settings.cs`: delete `ReminderMinutes + Position` until a Phase 2 reader exists
